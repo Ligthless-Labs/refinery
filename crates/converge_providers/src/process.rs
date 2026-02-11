@@ -2,15 +2,12 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use converge_core::error::ProviderError;
-use converge_core::types::ModelId;
+use converge_core::types::{Message, ModelId, Role};
 use tokio::process::Command;
 use tracing::{debug, warn};
 
 /// Maximum response size in bytes (100KB).
 const MAX_RESPONSE_SIZE: usize = 100_000;
-
-/// Maximum JSON nesting depth.
-const MAX_JSON_DEPTH: usize = 10;
 
 /// Resolve a CLI binary to its absolute path via `which`.
 ///
@@ -125,15 +122,22 @@ pub async fn spawn_cli(
     }
 }
 
-/// Extract JSON from a response, handling markdown fences.
+/// Extract system and user prompts from a message slice.
 #[must_use]
-pub fn extract_json_from_response(text: &str) -> Option<&str> {
-    converge_core::prompts::extract_json(text)
-}
-
-/// Check JSON depth before parsing.
-pub fn check_json_depth(text: &str) -> Result<(), usize> {
-    converge_core::prompts::check_json_depth(text, MAX_JSON_DEPTH)
+pub fn extract_prompts(messages: &[Message]) -> (String, String) {
+    let system = messages
+        .iter()
+        .filter(|m| m.role == Role::System)
+        .map(|m| m.content.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let user = messages
+        .iter()
+        .filter(|m| m.role == Role::User)
+        .map(|m| m.content.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    (system, user)
 }
 
 /// Extract the response text from a Codex JSONL event stream.
@@ -194,7 +198,7 @@ pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError>
         })?;
 
     // Strip markdown fences if present (Issue #11184)
-    if let Some(inner) = extract_json_from_response(response) {
+    if let Some(inner) = converge_core::prompts::extract_json(response) {
         Ok(inner.to_string())
     } else {
         Ok(response.to_string())

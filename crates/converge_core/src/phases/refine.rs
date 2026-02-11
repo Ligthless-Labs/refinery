@@ -41,8 +41,11 @@ pub async fn run(
             .iter()
             .filter(|((_, evaluatee), _)| *evaluatee == model_id)
             .enumerate()
-            .map(|(i, ((evaluator, _), eval))| {
-                let label = format!("Reviewer {} ({})", i + 1, evaluator.as_str());
+            .map(|(i, ((_, _), eval))| {
+                let label = format!(
+                    "Reviewer {}",
+                    char::from(b'A' + u8::try_from(i).unwrap_or(0))
+                );
                 (label, eval.review.overall_assessment.as_str())
             })
             .collect();

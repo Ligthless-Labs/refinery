@@ -65,16 +65,6 @@ pub enum ProviderError {
 
     #[error("CLI binary not found: {binary_name}")]
     BinaryNotFound { binary_name: String },
-
-    #[error("model {model} returned empty response")]
-    EmptyResponse { model: ModelId },
-
-    #[error("model {model} failed all retries ({attempts} attempts): {last_error}")]
-    RetriesExhausted {
-        model: ModelId,
-        attempts: u32,
-        last_error: String,
-    },
 }
 
 #[cfg(test)]

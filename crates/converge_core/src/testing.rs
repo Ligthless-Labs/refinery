@@ -137,31 +137,6 @@ impl ModelProvider for FailAfterNProvider {
     }
 }
 
-/// A mock provider that adds artificial delay.
-#[derive(Debug)]
-pub struct DelayProvider {
-    inner: Box<dyn ModelProvider>,
-    delay: std::time::Duration,
-}
-
-impl DelayProvider {
-    pub fn new(inner: Box<dyn ModelProvider>, delay: std::time::Duration) -> Self {
-        Self { inner, delay }
-    }
-}
-
-#[async_trait]
-impl ModelProvider for DelayProvider {
-    async fn send_message(&self, messages: &[Message]) -> Result<String, ProviderError> {
-        tokio::time::sleep(self.delay).await;
-        self.inner.send_message(messages).await
-    }
-
-    fn model_id(&self) -> &ModelId {
-        self.inner.model_id()
-    }
-}
-
 // --- Mock Strategies ---
 
 /// A strategy that always says "converge" starting from round N.
@@ -196,20 +171,6 @@ impl ClosingStrategy for AlwaysConvergeAfterN {
 
     fn name(&self) -> &'static str {
         "mock-converge-after-n"
-    }
-}
-
-/// A strategy that never converges.
-pub struct NeverConverge;
-
-#[async_trait]
-impl ClosingStrategy for NeverConverge {
-    async fn check(&self, _round_data: &RoundData) -> ClosingDecision {
-        ClosingDecision::Continue
-    }
-
-    fn name(&self) -> &'static str {
-        "mock-never-converge"
     }
 }
 

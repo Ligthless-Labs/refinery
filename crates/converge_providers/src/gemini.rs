@@ -61,19 +61,7 @@ impl GeminiProvider {
 #[async_trait]
 impl ModelProvider for GeminiProvider {
     async fn send_message(&self, messages: &[Message]) -> Result<String, ProviderError> {
-        let system_prompt: String = messages
-            .iter()
-            .filter(|m| m.role == converge_core::types::Role::System)
-            .map(|m| m.content.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        let user_prompt: String = messages
-            .iter()
-            .filter(|m| m.role == converge_core::types::Role::User)
-            .map(|m| m.content.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
+        let (system_prompt, user_prompt) = process::extract_prompts(messages);
 
         let args = self.build_args(&user_prompt);
         let args_refs: Vec<&str> = args.iter().map(String::as_str).collect();

@@ -44,10 +44,6 @@ struct Cli {
     #[arg(short, long, default_value = "text")]
     output_format: OutputFormat,
 
-    /// Progress format [text|json]
-    #[arg(long, default_value = "text")]
-    progress_format: ProgressFormat,
-
     /// Show per-round progress
     #[arg(short, long)]
     verbose: bool,
@@ -63,12 +59,6 @@ struct Cli {
 
 #[derive(Debug, Clone, clap::ValueEnum)]
 enum OutputFormat {
-    Text,
-    Json,
-}
-
-#[derive(Debug, Clone, clap::ValueEnum)]
-enum ProgressFormat {
     Text,
     Json,
 }
@@ -144,10 +134,13 @@ async fn main() -> ExitCode {
     // Read prompt from stdin if "-"
     let prompt = if cli.prompt == "-" {
         let mut buf = String::new();
-        let bytes_read = std::io::stdin()
-            .take(1_000_001)
-            .read_to_string(&mut buf)
-            .unwrap_or_default();
+        let bytes_read = match std::io::stdin().take(1_000_001).read_to_string(&mut buf) {
+            Ok(n) => n,
+            Err(e) => {
+                eprintln!("Error reading stdin: {e}");
+                return ExitCode::from(4);
+            }
+        };
         if bytes_read > 1_000_000 {
             eprintln!("Error: stdin input exceeds 1MB limit");
             return ExitCode::from(4);

@@ -8,7 +8,7 @@ use crate::strategy::ClosingDecision;
 
 /// Unique identifier for a model participating in consensus.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ModelId(pub String);
+pub struct ModelId(String);
 
 impl ModelId {
     #[must_use]
@@ -29,8 +29,7 @@ impl std::fmt::Display for ModelId {
 }
 
 /// Role in a conversation message.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Role {
     System,
     User,
@@ -38,7 +37,7 @@ pub enum Role {
 }
 
 /// A single message in a conversation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Message {
     pub role: Role,
     pub content: String,
@@ -71,7 +70,7 @@ impl Message {
 }
 
 /// A score in the range 1-10 (inclusive).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Score(u8);
 
 impl Score {
@@ -98,7 +97,7 @@ pub enum ScoreError {
 }
 
 /// A qualitative review of another model's answer.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Review {
     pub strengths: Vec<String>,
     pub weaknesses: Vec<String>,
@@ -107,7 +106,7 @@ pub struct Review {
 }
 
 /// A combined evaluation: qualitative review + numeric score.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Evaluation {
     pub review: Review,
     pub score: Score,
@@ -163,8 +162,7 @@ pub struct RoundData {
 }
 
 /// Phases of the consensus loop.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
     Propose,
     Evaluate,
@@ -285,7 +283,7 @@ impl EngineConfig {
 pub struct RoundOverrides {
     /// Additional context injected into all prompts this round.
     pub additional_context: Option<String>,
-    /// Models to remove for remaining rounds.
+    /// Models to exclude from this round.
     pub drop_models: Vec<ModelId>,
 }
 
