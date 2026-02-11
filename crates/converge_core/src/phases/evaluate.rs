@@ -211,11 +211,14 @@ fn parse_evaluation(response: &str, model: &ModelId) -> Result<Evaluation, Provi
             message: "missing or invalid 'score' field".to_string(),
         })?;
 
-    let score = Score::new(u8::try_from(score_value).unwrap_or(0)).map_err(|_| {
-        ProviderError::InvalidJson {
-            model: model.clone(),
-            message: format!("score {score_value} out of range 1-10"),
-        }
+    let score_u8 = u8::try_from(score_value).map_err(|_| ProviderError::InvalidJson {
+        model: model.clone(),
+        message: format!("score {score_value} out of u8 range"),
+    })?;
+
+    let score = Score::new(score_u8).map_err(|_| ProviderError::InvalidJson {
+        model: model.clone(),
+        message: format!("score {score_value} out of range 1-10"),
     })?;
 
     Ok(Evaluation {

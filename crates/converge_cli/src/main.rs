@@ -145,6 +145,7 @@ async fn main() -> ExitCode {
     let prompt = if cli.prompt == "-" {
         let mut buf = String::new();
         let bytes_read = std::io::stdin()
+            .take(1_000_001)
             .read_to_string(&mut buf)
             .unwrap_or_default();
         if bytes_read > 1_000_000 {
@@ -242,7 +243,13 @@ async fn main() -> ExitCode {
                             models_dropped: vec![],
                         },
                     };
-                    println!("{}", serde_json::to_string_pretty(&json_output).unwrap());
+                    match serde_json::to_string_pretty(&json_output) {
+                        Ok(json) => println!("{json}"),
+                        Err(e) => {
+                            eprintln!("Failed to serialize output: {e}");
+                            return ExitCode::from(1);
+                        }
+                    }
                 }
                 OutputFormat::Text => {
                     println!("Status: {:?}", outcome.status);
@@ -269,7 +276,10 @@ async fn main() -> ExitCode {
                         status: "error".to_string(),
                         error: converge_error_to_detail(&e),
                     };
-                    eprintln!("{}", serde_json::to_string_pretty(&err_response).unwrap());
+                    match serde_json::to_string_pretty(&err_response) {
+                        Ok(json) => eprintln!("{json}"),
+                        Err(ser_err) => eprintln!("Error: {e} (serialization failed: {ser_err})"),
+                    }
                 }
                 OutputFormat::Text => {
                     eprintln!("Error: {e}");
