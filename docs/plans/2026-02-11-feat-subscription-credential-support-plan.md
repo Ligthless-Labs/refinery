@@ -4,6 +4,7 @@ type: feat
 date: 2026-02-11
 enhanced: 2026-02-11 (via `/deepen-plan` — 7 parallel agents: 3 CLI auth research, security, architecture, simplicity, pattern recognition)
 completed: 2026-02-11
+reviewed: 2026-02-11 (via `/workflows:review` — 4 agents: security-sentinel, code-simplicity-reviewer, architecture-strategist, pattern-recognition-specialist)
 ---
 
 # feat: Add subscription-based credential support
