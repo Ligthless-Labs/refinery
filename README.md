@@ -17,41 +17,82 @@ ConVerge is a domain-agnostic Rust Library and CLI tool designed for iteratively
 
 ### Dependencies
 
-### Environment variables:
+### Environment variables
 
-#### Model Access
+The CLI requires credentials for the providers you want to use. You need at least one.
 
-One or more of
-- `ANTHROPIC_API_KEY`      Claude API key from https://console.anthropic.com/
-- `AWS_ACCESS_KEY_ID`      [TK: AWS BEDROCK] (requires a `AWS_SECRET_ACCESS_KEY`)
-- `AWS_SECRET_ACCESS_KEY`  [TK: AWS BEDROCK]
-- `CLAUDE_SESSION_TOKEN`   Retrieved via: `claude setup-token` (example: sk-ant-oat01-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx)
-- `GEMINI_OAUTH_TOKEN`     [TK]
-- `GCP_API_KEY`            [TK]
-- `OPENAI_API_KEY`         [TK]
-- `OPENAI_OAUTH_TOKEN`     [TK]
+Copy `.env.example` to `.env` and fill in your credentials:
 
-##### Anthropic
+```bash
+cp .env.example .env
+```
 
-[TK] (API Key permissions?)
+#### Anthropic (Claude)
 
-##### AWS
+**API Key** (pay-per-use) — set `ANTHROPIC_API_KEY`:
 
-[TK] (AWS Account permissions / policies / whatever?)
+1. Create an account at [console.anthropic.com](https://console.anthropic.com/)
+2. Go to **Settings → API Keys**
+3. Click **Create Key**, give it a name, and copy the value
 
-#### CLAUDE
+```bash
+ANTHROPIC_API_KEY=sk-ant-api03-...
+```
 
-[TK: How to retrieve OAuth token?]
+**Subscription** (Claude Pro/Max) — set `CLAUDE_CODE_OAUTH_TOKEN`:
 
-#####Gemini
+1. Install the Claude CLI: `npm install -g @anthropic-ai/claude-code`
+2. Run `claude setup-token` and follow the prompts — this generates a long-lived (~1 year) token
+3. Copy the token it outputs
 
-[TK: How to retrieve OAuth token?]
+```bash
+CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+```
 
-#### Google Cloud
+#### OpenAI (Codex)
 
-[TK: How to retrieve OAuth token?]
+**API Key** (pay-per-use) — set `OPENAI_API_KEY`:
 
+1. Create an account at [platform.openai.com](https://platform.openai.com/)
+2. Go to **Dashboard → API Keys** ([direct link](https://platform.openai.com/api-keys))
+3. Click **Create new secret key**, give it a name, and copy the value
 
-#### OPEN AI
+```bash
+OPENAI_API_KEY=sk-...
+```
 
-[TK: How to retrieve token + set up for enabling machine tokens?]
+**Alternative** — set `CODEX_API_KEY`:
+
+The Codex CLI also accepts `CODEX_API_KEY` for non-interactive (`codex exec`) mode. Same key format as `OPENAI_API_KEY`.
+
+```bash
+CODEX_API_KEY=sk-...
+```
+
+#### Google (Gemini)
+
+**API Key** (Google AI Studio) — set `GEMINI_API_KEY`:
+
+1. Go to [Google AI Studio](https://aistudio.google.com/apikey)
+2. Sign in with your Google account
+3. Click **Create API Key**, select a Google Cloud project (one will be created if needed), and copy the value
+
+```bash
+GEMINI_API_KEY=AI...
+```
+
+**Alternative** (Google Cloud) — set `GOOGLE_API_KEY`:
+
+If you already have a Google Cloud API key with the Generative Language API enabled, you can use it directly.
+
+```bash
+GOOGLE_API_KEY=AI...
+```
+
+#### AWS Bedrock
+
+[TK] — For accessing Claude and other models via AWS Bedrock. Requires `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+
+#### Google Cloud (Vertex AI)
+
+[TK] — For accessing Gemini via Vertex AI with full project configuration.

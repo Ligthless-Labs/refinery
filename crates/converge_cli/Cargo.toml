@@ -1,0 +1,22 @@
+[package]
+name = "converge_cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "converge"
+path = "src/main.rs"
+
+[dependencies]
+converge_core = { workspace = true }
+converge_providers = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[lints]
+workspace = true
