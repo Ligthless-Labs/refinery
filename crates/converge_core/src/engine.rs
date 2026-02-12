@@ -56,9 +56,7 @@ impl Engine {
                 Ok(o) => o,
                 Err(ConvergeError::InsufficientModels { round, .. }) if round > 1 => {
                     // Graceful degradation: return best-so-far from prior rounds
-                    return Ok(
-                        session.finalize_with_status(ConvergenceStatus::InsufficientModels),
-                    );
+                    return Ok(session.finalize_with_status(ConvergenceStatus::InsufficientModels));
                 }
                 Err(e) => return Err(e),
             };
