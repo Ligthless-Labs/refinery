@@ -3,6 +3,8 @@ title: "docs: Complete the README.md"
 type: docs
 date: 2026-02-12
 enhanced: 2026-02-12 (via `/deepen-plan` — Ankane style research + skill conventions)
+reviewed: 2026-02-12 (via `/workflows:review` — simplicity + architecture reviewers)
+completed: 2026-02-12
 brainstorm: docs/brainstorms/2026-02-12-readme-completion-brainstorm.md
 ---
 
