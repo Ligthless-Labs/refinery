@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 use crate::error::ProviderError;
 use crate::strategy::ClosingDecision;
 
+/// Per-round trajectory entry: the model's own proposal and reviews received as `(label, text)`.
+pub type RoundHistory = Vec<(String, Vec<(String, String)>)>;
+
 /// Unique identifier for a model participating in consensus.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ModelId(String);

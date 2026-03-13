@@ -3,6 +3,8 @@ use std::fmt::Write as _;
 use rand::Rng;
 use rand::seq::SliceRandom;
 
+use crate::types::RoundHistory;
+
 /// Generate a random 6-character hex nonce for delimiter tags.
 #[must_use]
 pub fn generate_nonce() -> String {
@@ -127,7 +129,7 @@ pub fn propose_prompt(user_prompt: &str, round_ctx: &str) -> String {
 pub fn propose_with_history_prompt(
     user_prompt: &str,
     round_ctx: &str,
-    history: &[(String, Vec<(String, String)>)], // Vec of (own_proposal, [(reviewer_label, assessment)])
+    history: &RoundHistory,
 ) -> String {
     if history.is_empty() {
         return propose_prompt(user_prompt, round_ctx);
@@ -136,7 +138,7 @@ pub fn propose_with_history_prompt(
     let mut history_text = String::from("<your_history>\n");
     for (round_num, (proposal, reviews)) in history.iter().enumerate() {
         let round = round_num + 1;
-        let _ = write!(history_text, "<round number=\"{round}\">\n");
+        let _ = writeln!(history_text, "<round number=\"{round}\">");
 
         let sanitized_proposal = proposal.replace("</your_proposal>", "&lt;/your_proposal&gt;");
         let _ = write!(
