@@ -23,7 +23,8 @@ pub struct CodexProvider {
     credential: Option<Credential>,
     model_name: String,
     reasoning_effort: String,
-    timeout: Duration,
+    max_timeout: Duration,
+    idle_timeout: Duration,
 }
 
 impl CodexProvider {
@@ -34,7 +35,8 @@ impl CodexProvider {
     pub async fn new(
         model_name: &str,
         reasoning_effort: &str,
-        timeout: Duration,
+        max_timeout: Duration,
+        idle_timeout: Duration,
     ) -> Result<Self, ProviderError> {
         let credential =
             credential::try_resolve_credential("codex", &["OPENAI_API_KEY", "CODEX_API_KEY"]);
@@ -47,7 +49,8 @@ impl CodexProvider {
             credential,
             model_name: model_name.to_string(),
             reasoning_effort: reasoning_effort.to_string(),
-            timeout,
+            max_timeout,
+            idle_timeout,
         })
     }
 
@@ -103,7 +106,8 @@ impl ModelProvider for CodexProvider {
             &self.binary_path,
             &args_refs,
             &env_vars,
-            self.timeout,
+            self.max_timeout,
+            self.idle_timeout,
             &self.model_id,
         )
         .await;
@@ -138,7 +142,8 @@ mod tests {
             credential: Some(test_credential()),
             model_name: "gpt-5.4".to_string(),
             reasoning_effort: "xhigh".to_string(),
-            timeout: Duration::from_secs(120),
+            max_timeout: Duration::from_secs(1800),
+            idle_timeout: Duration::from_secs(120),
         };
 
         let args = provider.build_args("system prompt", "user prompt", "/tmp/schema.json");
