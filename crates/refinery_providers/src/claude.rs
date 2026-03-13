@@ -58,7 +58,7 @@ impl ClaudeProvider {
             "--model".to_string(),
             format!("claude-{}", self.model_name),
             "--json-schema".to_string(),
-            r#"{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"]}"#
+            r#"{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}"#
                 .to_string(),
             "--append-system-prompt".to_string(),
             system_prompt.to_string(),
