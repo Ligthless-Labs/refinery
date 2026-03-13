@@ -250,21 +250,21 @@ cli/main.rs
 
 ## Acceptance Criteria
 
-- [ ] `ModelId` has `provider` and `model` fields
-- [ ] `ModelId::parse("provider/model")` splits on first `/`
-- [ ] `ModelId::from_parts("p", "m")` constructs from explicit parts
-- [ ] `ModelId` Display shows `provider/model`
-- [ ] `ModelId` serializes to/from flat `"provider/model"` string (not JSON object)
+- [x] `ModelId` has `provider` and `model` fields
+- [x] `ModelId::parse("provider/model")` splits on first `/`
+- [x] `ModelId::from_parts("p", "m")` constructs from explicit parts
+- [x] `ModelId` Display shows `provider/model`
+- [x] `ModelId` serializes to/from flat `"provider/model"` string (not JSON object)
 - [ ] `-m claude-code/claude-opus-4-6` works end-to-end
 - [ ] `-m claude-code` defaults to `claude-code/claude-opus-4-6`
 - [ ] `-m claude` produces helpful error suggesting `claude-code`
 - [ ] `-m codex-cli,gemini-cli` works with defaults
-- [ ] `build_provider()` matches on `provider()` field
-- [ ] Provider constructors receive full `ModelId`, use `.model()` for CLI args
+- [x] `build_provider()` matches on `provider()` field
+- [x] Provider constructors receive full `ModelId`, use `.model()` for CLI args
 - [ ] JSON output (`--output-format json`) uses flat `"provider/model"` strings
 - [ ] Progress output shows `provider/model` format
-- [ ] `cargo test --workspace` green
-- [ ] `cargo clippy --workspace -- -D warnings` clean
+- [x] `cargo test --workspace` green
+- [x] `cargo clippy --workspace -- -D warnings` clean
 - [ ] Car wash test passes: `refinery "The car wash is only 100m..." -m gemini-cli,codex-cli`
 
 ## Implementation (4 atomic commits)
