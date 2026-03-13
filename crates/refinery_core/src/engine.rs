@@ -5,10 +5,11 @@ use std::time::Instant;
 use crate::ModelProvider;
 use crate::error::ConvergeError;
 use crate::phases;
+use crate::progress::{ProgressEvent, ProgressFn};
 use crate::prompts;
 use crate::strategy::{ClosingDecision, ClosingStrategy};
 use crate::types::{
-    ConsensusOutcome, ConvergenceStatus, CostEstimate, EngineConfig, ModelAnswer, ModelId,
+    ConsensusOutcome, ConvergenceStatus, CostEstimate, EngineConfig, ModelAnswer, ModelId, Phase,
     RoundOutcome, RoundOverrides,
 };
 use tokio::sync::Semaphore;
@@ -18,6 +19,7 @@ pub struct Engine {
     providers: Vec<Arc<dyn ModelProvider>>,
     strategy: Box<dyn ClosingStrategy>,
     config: EngineConfig,
+    progress: Option<ProgressFn>,
 }
 
 impl Engine {
@@ -27,11 +29,13 @@ impl Engine {
         providers: Vec<Arc<dyn ModelProvider>>,
         strategy: Box<dyn ClosingStrategy>,
         config: EngineConfig,
+        progress: Option<ProgressFn>,
     ) -> Self {
         Self {
             providers,
             strategy,
             config,
+            progress,
         }
     }
 
@@ -105,6 +109,7 @@ impl Engine {
                 outcomes: vec![],
                 single_model: true,
                 single_model_elapsed: Some(elapsed),
+                progress: self.progress.clone(),
             });
         }
 
@@ -123,6 +128,7 @@ impl Engine {
             outcomes: vec![],
             single_model: false,
             single_model_elapsed: None,
+            progress: self.progress.clone(),
         })
     }
 }
@@ -143,6 +149,7 @@ pub struct Session<'a> {
     outcomes: Vec<RoundOutcome>,
     single_model: bool,
     single_model_elapsed: Option<std::time::Duration>,
+    progress: Option<ProgressFn>,
 }
 
 impl Session<'_> {
@@ -191,6 +198,11 @@ impl Session<'_> {
         let round = self.current_round;
         let round_start = Instant::now();
 
+        self.emit(ProgressEvent::RoundStarted {
+            round,
+            total: self.config.max_rounds,
+        });
+
         // Apply model drops from overrides
         let mut active_providers = self.providers.clone();
         for drop_id in &overrides.drop_models {
@@ -238,6 +250,10 @@ impl Session<'_> {
         );
 
         // Phase 1: PROPOSE
+        self.emit(ProgressEvent::PhaseStarted {
+            round,
+            phase: Phase::Propose,
+        });
         let proposal_set = phases::propose::run(
             &active_providers,
             &self.prompt,
@@ -246,6 +262,7 @@ impl Session<'_> {
             &semaphore,
             self.config.timeout,
             additional_context,
+            self.progress.clone(),
         )
         .await;
 
@@ -270,6 +287,10 @@ impl Session<'_> {
             .collect();
 
         // Phase 2: EVALUATE
+        self.emit(ProgressEvent::PhaseStarted {
+            round,
+            phase: Phase::Evaluate,
+        });
         let evaluation_set = phases::evaluate::run(
             &eval_providers,
             &proposal_set.proposals,
@@ -277,6 +298,7 @@ impl Session<'_> {
             &round_ctx,
             &semaphore,
             self.config.timeout,
+            self.progress.clone(),
         )
         .await;
 
@@ -285,6 +307,10 @@ impl Session<'_> {
                 .unwrap_or(0);
 
         // Phase 3: REFINE
+        self.emit(ProgressEvent::PhaseStarted {
+            round,
+            phase: Phase::Refine,
+        });
         let refinement_set = phases::refine::run(
             &eval_providers,
             &proposal_set.proposals,
@@ -294,6 +320,7 @@ impl Session<'_> {
             &semaphore,
             self.config.timeout,
             additional_context,
+            self.progress.clone(),
         )
         .await;
 
@@ -312,8 +339,24 @@ impl Session<'_> {
         // Update state
         self.last_answers.clone_from(&refinement_set.refinements);
         self.last_mean_scores = phases::close::compute_mean_scores(&evaluation_set);
-        self.current_winner = new_winner;
+        self.current_winner = new_winner.clone();
         self.stable_rounds = new_stable;
+
+        // Emit convergence check
+        let best_score = self
+            .last_mean_scores
+            .values()
+            .copied()
+            .fold(0.0_f64, f64::max);
+        self.emit(ProgressEvent::ConvergenceCheck {
+            round,
+            converged: matches!(closing_decision, ClosingDecision::Converged { .. }),
+            winner: new_winner,
+            best_score,
+            threshold: self.config.threshold,
+            stable_rounds: new_stable,
+            required_stable: self.config.stability_rounds,
+        });
         self.total_calls += call_count;
 
         let elapsed = round_start.elapsed();
@@ -352,6 +395,12 @@ impl Session<'_> {
             }
         }
         self.finalize_with_status(ConvergenceStatus::MaxRoundsExceeded)
+    }
+
+    fn emit(&self, event: ProgressEvent) {
+        if let Some(ref cb) = self.progress {
+            cb(event);
+        }
     }
 
     fn finalize_with_status(self, status: ConvergenceStatus) -> ConsensusOutcome {
@@ -407,7 +456,7 @@ mod tests {
         let providers = make_providers(&["solo"]);
         let config = default_config(1);
         let strategy = Box::new(crate::strategy::VoteThreshold::new(8.0, 2));
-        let engine = Engine::new(providers, strategy, config);
+        let engine = Engine::new(providers, strategy, config, None);
 
         let result = engine.run("test prompt").await.unwrap();
         assert_eq!(result.status, ConvergenceStatus::SingleModel);
@@ -425,7 +474,7 @@ mod tests {
         ];
         let config = default_config(3);
         let strategy = Box::new(AlwaysConvergeAfterN::new(2));
-        let engine = Engine::new(providers, strategy, config);
+        let engine = Engine::new(providers, strategy, config, None);
 
         let result = engine.run("test prompt").await.unwrap();
         assert_eq!(result.status, ConvergenceStatus::Converged);
@@ -442,7 +491,7 @@ mod tests {
         let config =
             EngineConfig::new(models, 3, 8.0, 2, std::time::Duration::from_secs(120), 10).unwrap();
         let strategy = Box::new(crate::strategy::VoteThreshold::new(8.0, 2));
-        let engine = Engine::new(providers, strategy, config);
+        let engine = Engine::new(providers, strategy, config, None);
 
         let result = engine.run("test prompt").await.unwrap();
         assert_eq!(result.status, ConvergenceStatus::MaxRoundsExceeded);
@@ -458,7 +507,7 @@ mod tests {
         ];
         let config = default_config(3);
         let strategy = Box::new(AlwaysConvergeAfterN::new(2));
-        let engine = Engine::new(providers, strategy, config);
+        let engine = Engine::new(providers, strategy, config, None);
 
         let result = engine.run("test prompt").await.unwrap();
         // Should still succeed with 2 models
@@ -473,7 +522,7 @@ mod tests {
         ];
         let config = default_config(2);
         let strategy = Box::new(crate::strategy::VoteThreshold::new(8.0, 2));
-        let engine = Engine::new(providers, strategy, config);
+        let engine = Engine::new(providers, strategy, config, None);
 
         let result = engine.run("test prompt").await;
         assert!(result.is_err());
@@ -501,7 +550,7 @@ mod tests {
         let config =
             EngineConfig::new(models, 5, 8.0, 2, std::time::Duration::from_secs(120), 10).unwrap();
         let strategy = Box::new(crate::strategy::VoteThreshold::new(8.0, 2));
-        let engine = Engine::new(providers, strategy, config);
+        let engine = Engine::new(providers, strategy, config, None);
 
         let result = engine.run("test prompt").await;
         // Should succeed with best-so-far, not error
@@ -518,7 +567,7 @@ mod tests {
         ];
         let config = default_config(2);
         let strategy = Box::new(AlwaysConvergeAfterN::new(2));
-        let engine = Engine::new(providers, strategy, config);
+        let engine = Engine::new(providers, strategy, config, None);
 
         let mut session = engine.start("test prompt").await.unwrap();
 
@@ -549,7 +598,7 @@ mod tests {
         ];
         let config = default_config(2);
         let strategy = Box::new(crate::strategy::VoteThreshold::new(8.0, 2));
-        let engine = Engine::new(providers, strategy, config);
+        let engine = Engine::new(providers, strategy, config, None);
 
         let mut session = engine.start("test prompt").await.unwrap();
         let _outcome = session.next_round().await.unwrap();
@@ -567,7 +616,7 @@ mod tests {
         ];
         let config = default_config(3);
         let strategy = Box::new(AlwaysConvergeAfterN::new(1));
-        let engine = Engine::new(providers, strategy, config);
+        let engine = Engine::new(providers, strategy, config, None);
 
         let mut session = engine.start("test prompt").await.unwrap();
 

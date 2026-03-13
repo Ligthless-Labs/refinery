@@ -7,6 +7,7 @@ use tracing::{info, warn};
 
 use crate::ModelProvider;
 use crate::error::ProviderError;
+use crate::progress::{ProgressEvent, ProgressFn};
 use crate::prompts;
 use crate::types::{EvaluationSet, Message, ModelId, RefinementSet};
 
@@ -21,6 +22,7 @@ pub async fn run(
     semaphore: &Arc<Semaphore>,
     timeout: std::time::Duration,
     additional_context: Option<&str>,
+    progress: Option<ProgressFn>,
 ) -> RefinementSet {
     let mut refinements = HashMap::new();
     let mut unrefined = Vec::new();
@@ -109,9 +111,21 @@ pub async fn run(
     while let Some(result) = handles.join_next().await {
         match result {
             Ok(Ok((model_id, response))) => {
+                if let Some(ref cb) = progress {
+                    cb(ProgressEvent::ModelRefined {
+                        model: model_id.clone(),
+                        word_count: response.split_whitespace().count(),
+                    });
+                }
                 refinements.insert(model_id, response);
             }
             Ok(Err((model_id, err))) => {
+                if let Some(ref cb) = progress {
+                    cb(ProgressEvent::ModelRefineFailed {
+                        model: model_id.clone(),
+                        error: err.to_string(),
+                    });
+                }
                 // Keep previous answer on refine failure (D4)
                 warn!(model = %model_id, error = %err, "refine failed, keeping previous answer");
                 if let Some(prev) = proposals.get(&model_id) {

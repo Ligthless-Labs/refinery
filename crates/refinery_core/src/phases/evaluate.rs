@@ -6,6 +6,7 @@ use tracing::{info, warn};
 
 use crate::ModelProvider;
 use crate::error::ProviderError;
+use crate::progress::{self, ProgressEvent, ProgressFn};
 use crate::prompts;
 use crate::types::{Evaluation, EvaluationSet, Message, ModelId, Review, Score};
 
@@ -20,6 +21,7 @@ pub async fn run(
     round_ctx: &str,
     semaphore: &Arc<Semaphore>,
     timeout: std::time::Duration,
+    progress: Option<ProgressFn>,
 ) -> EvaluationSet {
     let mut evaluations = HashMap::new();
     let mut dropped = Vec::new();
@@ -114,9 +116,24 @@ pub async fn run(
     while let Some(result) = handles.join_next().await {
         match result {
             Ok(Ok((evaluator, evaluatee, evaluation))) => {
+                if let Some(ref cb) = progress {
+                    cb(ProgressEvent::EvaluationCompleted {
+                        reviewer: evaluator.clone(),
+                        reviewee: evaluatee.clone(),
+                        score: f64::from(evaluation.score.value()),
+                        preview: progress::preview(&evaluation.review.overall_assessment, 60),
+                    });
+                }
                 evaluations.insert((evaluator, evaluatee), evaluation);
             }
             Ok(Err((evaluator, evaluatee, err))) => {
+                if let Some(ref cb) = progress {
+                    cb(ProgressEvent::EvaluationFailed {
+                        reviewer: evaluator.clone(),
+                        reviewee: evaluatee.clone(),
+                        error: err.to_string(),
+                    });
+                }
                 dropped.push((evaluator, evaluatee, err));
             }
             Err(join_err) => {

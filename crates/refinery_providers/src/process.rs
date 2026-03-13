@@ -1,21 +1,16 @@
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use refinery_core::error::ProviderError;
+use refinery_core::progress::{ProgressEvent, ProgressFn};
 use refinery_core::types::{Message, ModelId, Role};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use tracing::{debug, trace, warn};
+use tracing::{debug, warn};
 
 /// Maximum response size in bytes (100KB).
 const MAX_RESPONSE_SIZE: usize = 100_000;
-
-/// Progress callback invoked per line of subprocess output.
-///
-/// Arguments: `(model_id, lines_read, elapsed_since_spawn)`.
-pub type ProgressFn = Arc<dyn Fn(&ModelId, usize, Duration) + Send + Sync>;
 
 /// Return a sanitized PATH for child processes.
 ///
@@ -146,9 +141,13 @@ pub async fn spawn_cli(
                 Ok(Ok(0)) => break, // EOF
                 Ok(Ok(_)) => {
                     line_count += 1;
-                    trace!(model = %model_clone, line = %line_buf.trim_end(), "stream event");
+                    debug!(model = %model_clone, line = %line_buf.trim_end(), "stream event");
                     if let Some(ref cb) = progress {
-                        cb(&model_clone, line_count, start.elapsed());
+                        cb(ProgressEvent::SubprocessOutput {
+                            model: model_clone.clone(),
+                            lines: line_count,
+                            elapsed: start.elapsed(),
+                        });
                     }
                     collected.push_str(&line_buf);
                     if collected.len() > MAX_RESPONSE_SIZE {

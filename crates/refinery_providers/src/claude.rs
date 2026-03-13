@@ -4,10 +4,11 @@ use std::time::Duration;
 use async_trait::async_trait;
 use refinery_core::ModelProvider;
 use refinery_core::error::ProviderError;
+use refinery_core::progress::ProgressFn;
 use refinery_core::types::{Message, ModelId};
 
 use crate::credential::{self, Credential};
-use crate::process::{self, ProgressFn};
+use crate::process;
 
 /// Claude CLI provider adapter.
 ///
@@ -76,7 +77,7 @@ impl ClaudeProvider {
             r#"{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}"#
                 .to_string(),
             "--max-turns".to_string(),
-            "10".to_string(), // structured output requires multiple turns (hook → StructuredOutput tool)
+            "50".to_string(), // structured output requires multiple turns (hook → StructuredOutput tool)
             "--effort".to_string(),
             "high".to_string(),
             "--model".to_string(),
@@ -160,7 +161,7 @@ mod tests {
         assert!(args.contains(&"--effort".to_string()));
         assert!(args.contains(&"high".to_string()));
         assert!(args.contains(&"--max-turns".to_string()));
-        assert!(args.contains(&"10".to_string()));
+        assert!(args.contains(&"50".to_string()));
         assert!(args.contains(&"--".to_string())); // sentinel
         assert!(args.contains(&"user prompt".to_string()));
     }

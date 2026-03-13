@@ -6,6 +6,7 @@ use tracing::{info, warn};
 
 use crate::ModelProvider;
 use crate::error::ProviderError;
+use crate::progress::{self, ProgressEvent, ProgressFn};
 use crate::prompts;
 use crate::types::{Message, ProposalSet};
 
@@ -18,6 +19,7 @@ pub async fn run(
     semaphore: &Arc<Semaphore>,
     timeout: std::time::Duration,
     additional_context: Option<&str>,
+    progress: Option<ProgressFn>,
 ) -> ProposalSet {
     let mut proposals = std::collections::HashMap::new();
     let mut dropped = Vec::new();
@@ -66,9 +68,22 @@ pub async fn run(
     while let Some(result) = handles.join_next().await {
         match result {
             Ok(Ok((model_id, response))) => {
+                if let Some(ref cb) = progress {
+                    cb(ProgressEvent::ModelProposed {
+                        model: model_id.clone(),
+                        word_count: response.split_whitespace().count(),
+                        preview: progress::preview(&response, 60),
+                    });
+                }
                 proposals.insert(model_id, response);
             }
             Ok(Err((model_id, err))) => {
+                if let Some(ref cb) = progress {
+                    cb(ProgressEvent::ModelProposeFailed {
+                        model: model_id.clone(),
+                        error: err.to_string(),
+                    });
+                }
                 dropped.push((model_id, err));
             }
             Err(join_err) => {

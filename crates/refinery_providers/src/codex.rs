@@ -4,10 +4,11 @@ use std::time::Duration;
 use async_trait::async_trait;
 use refinery_core::ModelProvider;
 use refinery_core::error::ProviderError;
+use refinery_core::progress::ProgressFn;
 use refinery_core::types::{Message, ModelId};
 
 use crate::credential::{self, Credential};
-use crate::process::{self, ProgressFn};
+use crate::process;
 
 /// Codex CLI provider adapter.
 ///
