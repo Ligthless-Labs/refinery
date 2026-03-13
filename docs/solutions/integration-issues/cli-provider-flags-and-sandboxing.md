@@ -2,7 +2,7 @@
 title: "CLI provider flags for tool restriction and sandboxing"
 category: integration-issues
 tags: [claude-cli, codex-cli, gemini-cli, subprocess, sandboxing, tool-restriction]
-module: converge_providers
+module: refinery_providers
 symptom: "CLI tools execute arbitrary tools/code when invoked as subprocess"
 root_cause: "Each CLI has different flags for restricting tool use and sandboxing"
 date: 2026-02-12
@@ -10,7 +10,7 @@ date: 2026-02-12
 
 # CLI Provider Flags for Tool Restriction and Sandboxing
 
-When invoking AI CLI tools (Claude CLI, Codex CLI, Gemini CLI) as subprocesses from a Rust program, each tool has a different interface for disabling tools, restricting filesystem access, passing system prompts, and producing machine-readable output. This document captures the working configurations discovered during development of the `converge_providers` crate.
+When invoking AI CLI tools (Claude CLI, Codex CLI, Gemini CLI) as subprocesses from a Rust program, each tool has a different interface for disabling tools, restricting filesystem access, passing system prompts, and producing machine-readable output. This document captures the working configurations discovered during development of the `refinery_providers` crate.
 
 ## 1. Claude CLI
 
@@ -68,7 +68,7 @@ When using `CLAUDE_CODE_OAUTH_TOKEN`, the `HOME` env var must also be injected s
 Extraction logic: check `is_error` first; if `false`, read the `result` field.
 
 ```rust
-// From crates/converge_providers/src/process.rs
+// From crates/refinery_providers/src/process.rs
 pub fn extract_claude_response(json_text: &str) -> Result<String, ProviderError> {
     let model = ModelId::new("claude");
 
@@ -104,7 +104,7 @@ pub fn extract_claude_response(json_text: &str) -> Result<String, ProviderError>
 ### Rust build_args implementation
 
 ```rust
-// From crates/converge_providers/src/claude.rs
+// From crates/refinery_providers/src/claude.rs
 fn build_args(&self, system_prompt: &str, user_prompt: &str) -> Vec<String> {
     vec![
         "-p".to_string(),
@@ -172,7 +172,7 @@ Codex does not output a single JSON object. It emits a JSONL stream of events, o
 Extraction logic: scan lines in reverse for the last `turn.completed` event and read its `text` field.
 
 ```rust
-// From crates/converge_providers/src/process.rs
+// From crates/refinery_providers/src/process.rs
 pub fn extract_codex_response(jsonl: &str) -> Result<String, ProviderError> {
     let model = ModelId::new("codex");
 
@@ -200,7 +200,7 @@ pub fn extract_codex_response(jsonl: &str) -> Result<String, ProviderError> {
 ### Rust build_args implementation
 
 ```rust
-// From crates/converge_providers/src/codex.rs
+// From crates/refinery_providers/src/codex.rs
 fn build_args(&self, system_prompt: &str, user_prompt: &str) -> Vec<String> {
     vec![
         "exec".to_string(),
@@ -251,7 +251,7 @@ gemini \
 Gemini CLI has no `--system-prompt` flag. Instead, the system prompt must be passed via the `GEMINI_SYSTEM_MD` environment variable. This is a notable asymmetry with the other CLIs.
 
 ```rust
-// From crates/converge_providers/src/gemini.rs
+// From crates/refinery_providers/src/gemini.rs
 let env_vars = [
     self.credential.as_env_pair(),
     ("GEMINI_SYSTEM_MD", system_prompt.as_str()),
@@ -278,7 +278,7 @@ Gemini CLI accepts two credential env vars, checked in priority order:
 Extraction logic: check `error` is null, then read `response`. There is a known issue (Gemini CLI Issue #11184) where the `response` field may contain markdown-wrapped JSON (triple-backtick fences around JSON content). The extraction logic strips these fences when present.
 
 ```rust
-// From crates/converge_providers/src/process.rs
+// From crates/refinery_providers/src/process.rs
 pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError> {
     let model = ModelId::new("gemini");
 
@@ -308,7 +308,7 @@ pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError>
         })?;
 
     // Strip markdown fences if present (Issue #11184)
-    if let Some(inner) = converge_core::prompts::extract_json(response) {
+    if let Some(inner) = refinery_core::prompts::extract_json(response) {
         Ok(inner.to_string())
     } else {
         Ok(response.to_string())
@@ -325,7 +325,7 @@ pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError>
 All subprocesses have their environment completely cleared with `env_clear()` before injecting only the required variables. This prevents credential leakage and ensures reproducible behavior:
 
 ```rust
-// From crates/converge_providers/src/process.rs
+// From crates/refinery_providers/src/process.rs
 let mut cmd = Command::new(binary_path);
 
 // Security: clear all inherited environment
@@ -345,7 +345,7 @@ for (key, value) in env_vars {
 CLI binaries are resolved to absolute paths via `which` BEFORE `env_clear()` removes `PATH` from the parent's view. This is necessary because `Command::new("claude")` would fail in a cleared environment:
 
 ```rust
-// From crates/converge_providers/src/process.rs
+// From crates/refinery_providers/src/process.rs
 pub async fn resolve_binary(name: &str) -> Result<PathBuf, ProviderError> {
     let output = Command::new("which")
         .arg(name)
@@ -415,7 +415,7 @@ if stdout.len() > MAX_RESPONSE_SIZE {
 Each provider accepts multiple env vars for authentication. The `resolve_credential` function checks them in declared order and returns the first non-empty match:
 
 ```rust
-// From crates/converge_providers/src/credential.rs
+// From crates/refinery_providers/src/credential.rs
 pub fn resolve_credential(
     provider: &str,
     candidates: &[&'static str],
@@ -437,7 +437,7 @@ Provider-specific priority orders:
 `std::env::set_var` is unsafe in Rust 2024 edition, making it unsuitable for tests. The solution is a `resolve_credential_with` function that accepts a reader closure instead of calling `std::env::var` directly:
 
 ```rust
-// From crates/converge_providers/src/credential.rs
+// From crates/refinery_providers/src/credential.rs
 pub(crate) fn resolve_credential_with<F>(
     provider: &str,
     candidates: &[&'static str],

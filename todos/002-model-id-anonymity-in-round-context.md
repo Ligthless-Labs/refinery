@@ -22,7 +22,7 @@ Map `ModelId` → anonymous label in `round_context()` before embedding in the p
 
 ## References
 
-- `crates/converge_core/src/prompts.rs:61` — `round_context()` function
-- `crates/converge_core/src/prompts.rs:37` — `shuffled_labels()` function
-- `crates/converge_core/src/engine.rs` — where `round_context` is called
+- `crates/refinery_core/src/prompts.rs:61` — `round_context()` function
+- `crates/refinery_core/src/prompts.rs:37` — `shuffled_labels()` function
+- `crates/refinery_core/src/engine.rs` — where `round_context` is called
 - Copilot review comment on PR #1

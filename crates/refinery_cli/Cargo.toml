@@ -1,24 +1,22 @@
 [package]
-name = "converge_core"
+name = "refinery_cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+[[bin]]
+name = "refinery"
+path = "src/main.rs"
+
 [dependencies]
+refinery_core = { workspace = true }
+refinery_providers = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
-async-trait = { workspace = true }
+clap = { workspace = true }
 tracing = { workspace = true }
-rand = { workspace = true }
-
-[features]
-testing = []
-
-[dev-dependencies]
-tokio = { workspace = true, features = ["test-util"] }
-rstest = "0.25"
+tracing-subscriber = { workspace = true }
 
 [lints]
 workspace = true

@@ -121,8 +121,8 @@ Rewrite `README.md` in Ankane style (concise, imperative, code-heavy). Cover bot
 
 - Brainstorm: `docs/brainstorms/2026-02-12-readme-completion-brainstorm.md`
 - Current README: `README.md`
-- CLI args: `crates/converge_cli/src/main.rs:17-58`
-- Public API: `crates/converge_core/src/lib.rs`
-- Engine: `crates/converge_core/src/engine.rs:1-128`
-- Types: `crates/converge_core/src/types.rs`
-- Providers: `crates/converge_providers/src/lib.rs`
+- CLI args: `crates/refinery_cli/src/main.rs:17-58`
+- Public API: `crates/refinery_core/src/lib.rs`
+- Engine: `crates/refinery_core/src/engine.rs:1-128`
+- Types: `crates/refinery_core/src/types.rs`
+- Providers: `crates/refinery_providers/src/lib.rs`

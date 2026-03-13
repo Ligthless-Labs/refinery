@@ -23,5 +23,5 @@ Use `setsid` (Unix) to place each spawned CLI process in its own process group, 
 
 ## References
 
-- `crates/converge_providers/src/process.rs` — `spawn_cli()` function
+- `crates/refinery_providers/src/process.rs` — `spawn_cli()` function
 - Plan: `docs/plans/2026-02-10-feat-consensus-loop-engine-plan.md` (§ process management)

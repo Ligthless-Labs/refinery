@@ -8,15 +8,15 @@ use clap::Parser;
 use serde::Serialize;
 use tracing::info;
 
-use converge_core::types::{ConvergenceStatus, ModelId};
-use converge_core::{EngineConfig, ModelProvider};
+use refinery_core::types::{ConvergenceStatus, ModelId};
+use refinery_core::{EngineConfig, ModelProvider};
 
 /// Iterative multi-model consensus engine.
 ///
 /// Given a prompt, N models independently produce answers, cross-review each other's work,
 /// score all answers, then refine — repeating until a configurable convergence criterion is met.
 #[derive(Parser, Debug)]
-#[command(name = "converge", version, about)]
+#[command(name = "refinery", version, about)]
 struct Cli {
     /// The prompt to reach consensus on (or - for stdin, max 1MB). Optional when --file is used.
     #[arg(value_name = "PROMPT")]
@@ -182,8 +182,8 @@ async fn main() -> ExitCode {
     };
 
     // Assemble the final prompt
-    let nonce = converge_core::prompts::generate_nonce();
-    let prompt = converge_core::prompts::assemble_file_prompt(
+    let nonce = refinery_core::prompts::generate_nonce();
+    let prompt = refinery_core::prompts::assemble_file_prompt(
         prompt_text.as_deref(),
         &file_data,
         &nonce,
@@ -213,7 +213,7 @@ async fn main() -> ExitCode {
 
     // Dry run: show cost estimate
     if cli.dry_run {
-        let estimate = converge_core::Engine::estimate(&config);
+        let estimate = refinery_core::Engine::estimate(&config);
         println!("Dry run estimate:");
         println!("  Models: {}", estimate.model_count);
         println!("  Calls per round: {}", estimate.calls_per_round);
@@ -242,8 +242,8 @@ async fn main() -> ExitCode {
         }
     }
 
-    let strategy = Box::new(converge_core::VoteThreshold::new(cli.threshold, 2));
-    let engine = converge_core::Engine::new(providers, strategy, config);
+    let strategy = Box::new(refinery_core::VoteThreshold::new(cli.threshold, 2));
+    let engine = refinery_core::Engine::new(providers, strategy, config);
 
     info!("Starting consensus run with {} models", cli.models.len());
 
@@ -399,19 +399,19 @@ async fn build_provider(
         m if m.starts_with("claude") => {
             let model_name = m.strip_prefix("claude-").unwrap_or("opus-4-6");
             let provider =
-                converge_providers::claude::ClaudeProvider::new(model_name, timeout).await?;
+                refinery_providers::claude::ClaudeProvider::new(model_name, timeout).await?;
             Ok(Arc::new(provider))
         }
         m if m == "codex" || m.starts_with("codex-") => {
             let model_name = m.strip_prefix("codex-").unwrap_or("gpt-5.4");
             let provider =
-                converge_providers::codex::CodexProvider::new(model_name, "xhigh", timeout).await?;
+                refinery_providers::codex::CodexProvider::new(model_name, "xhigh", timeout).await?;
             Ok(Arc::new(provider))
         }
         m if m.starts_with("gemini") => {
             let model_name = if m == "gemini" { "gemini-3.1-pro-preview" } else { m };
             let provider =
-                converge_providers::gemini::GeminiProvider::new(model_name, timeout).await?;
+                refinery_providers::gemini::GeminiProvider::new(model_name, timeout).await?;
             Ok(Arc::new(provider))
         }
         _ => Err(format!(
@@ -421,9 +421,9 @@ async fn build_provider(
     }
 }
 
-fn converge_error_to_detail(err: &converge_core::ConvergeError) -> ErrorDetail {
+fn converge_error_to_detail(err: &refinery_core::ConvergeError) -> ErrorDetail {
     match err {
-        converge_core::ConvergeError::PhaseFailure {
+        refinery_core::ConvergeError::PhaseFailure {
             phase,
             model,
             source: _,
@@ -435,7 +435,7 @@ fn converge_error_to_detail(err: &converge_core::ConvergeError) -> ErrorDetail {
             phase: Some(phase.to_string()),
             retryable: true,
         },
-        converge_core::ConvergeError::InsufficientModels { round, .. } => ErrorDetail {
+        refinery_core::ConvergeError::InsufficientModels { round, .. } => ErrorDetail {
             code: "insufficient_models".to_string(),
             message: err.to_string(),
             provider: None,
@@ -443,7 +443,7 @@ fn converge_error_to_detail(err: &converge_core::ConvergeError) -> ErrorDetail {
             phase: None,
             retryable: false,
         },
-        converge_core::ConvergeError::ConfigInvalid { .. } => ErrorDetail {
+        refinery_core::ConvergeError::ConfigInvalid { .. } => ErrorDetail {
             code: "config_invalid".to_string(),
             message: err.to_string(),
             provider: None,
@@ -451,7 +451,7 @@ fn converge_error_to_detail(err: &converge_core::ConvergeError) -> ErrorDetail {
             phase: None,
             retryable: false,
         },
-        converge_core::ConvergeError::Cancelled => ErrorDetail {
+        refinery_core::ConvergeError::Cancelled => ErrorDetail {
             code: "cancelled".to_string(),
             message: err.to_string(),
             provider: None,

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/converge_core", "crates/converge_providers", "crates/converge_cli"]
+members = ["crates/refinery_core", "crates/refinery_providers", "crates/refinery_cli"]
 
 [workspace.package]
 version = "0.1.0"
@@ -9,8 +9,8 @@ rust-version = "1.85"
 license = "MIT"
 
 [workspace.dependencies]
-converge_core = { path = "crates/converge_core", version = "0.1.0" }
-converge_providers = { path = "crates/converge_providers", version = "0.1.0" }
+refinery_core = { path = "crates/refinery_core", version = "0.1.0" }
+refinery_providers = { path = "crates/refinery_providers", version = "0.1.0" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "sync", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

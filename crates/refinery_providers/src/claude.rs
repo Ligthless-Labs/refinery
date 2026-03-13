@@ -2,16 +2,16 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use converge_core::ModelProvider;
-use converge_core::error::ProviderError;
-use converge_core::types::{Message, ModelId};
+use refinery_core::ModelProvider;
+use refinery_core::error::ProviderError;
+use refinery_core::types::{Message, ModelId};
 
 use crate::credential::{self, Credential};
 use crate::process;
 
 /// Claude CLI provider adapter.
 ///
-/// Invokes: `claude -p --output-format json --tools "" --max-turns 1 --append-system-prompt "SYSTEM" -- "PROMPT"`
+/// Invokes: `claude -p --output-format json --tools "" --max-turns 1 --effort high --model claude-opus-4-6 --append-system-prompt "SYSTEM" -- "PROMPT"`
 ///
 /// Supports: `ANTHROPIC_API_KEY` (pay-per-use) or `CLAUDE_CODE_OAUTH_TOKEN` (Pro/Max subscription).
 #[derive(Debug)]
@@ -51,6 +51,8 @@ impl ClaudeProvider {
             String::new(), // empty string disables all tools
             "--max-turns".to_string(),
             "1".to_string(),
+            "--effort".to_string(),
+            "high".to_string(),
             "--model".to_string(),
             self.model_name.clone(),
             "--append-system-prompt".to_string(),
@@ -113,10 +115,10 @@ mod tests {
     #[test]
     fn build_args_contains_required_flags() {
         let provider = ClaudeProvider {
-            model_id: ModelId::new("claude-sonnet"),
+            model_id: ModelId::new("claude-opus-4-6"),
             binary_path: PathBuf::from("/usr/local/bin/claude"),
             credential: test_credential(),
-            model_name: "sonnet".to_string(),
+            model_name: "opus-4-6".to_string(),
             timeout: Duration::from_secs(120),
         };
 

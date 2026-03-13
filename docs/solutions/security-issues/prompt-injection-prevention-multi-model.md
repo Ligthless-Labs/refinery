@@ -2,7 +2,7 @@
 title: "Prompt injection prevention in multi-model consensus"
 category: security-issues
 tags: [prompt-injection, xml-tags, nonce, sanitization, llm-security, multi-model]
-module: converge_core
+module: refinery_core
 symptom: "Compromised model could inject instructions via its answer text"
 root_cause: "Model output embedded directly in prompts for other models without sanitization"
 date: 2026-02-12
@@ -20,7 +20,7 @@ The attack surface is unusually wide compared to single-model prompt injection b
 2. **Multiple injection points exist per round.** Each EVALUATE call wraps one model's answer for another model to read. Each REFINE call embeds multiple reviews.
 3. **Injection compounds across rounds.** A successful injection in round 1 can alter a model's behavior for all subsequent rounds.
 
-The mitigations implemented in `converge_core::prompts` form a defense-in-depth strategy: no single technique is sufficient, but together they make injection substantially harder to execute.
+The mitigations implemented in `refinery_core::prompts` form a defense-in-depth strategy: no single technique is sufficient, but together they make injection substantially harder to execute.
 
 ## Learnings
 
@@ -31,7 +31,7 @@ The mitigations implemented in `converge_core::prompts` form a defense-in-depth 
 **Solution:** Generate a random 6-hex-character nonce per round and use it in the XML tag names. The tags become `<answer-a7f3c1>...</answer-a7f3c1>`, which the adversarial model cannot predict at generation time.
 
 ```rust
-// crates/converge_core/src/prompts.rs
+// crates/refinery_core/src/prompts.rs
 
 /// Generate a random 6-character hex nonce for delimiter tags.
 #[must_use]
@@ -59,7 +59,7 @@ The nonce is generated once per evaluation phase (in `phases/evaluate.rs`) and s
 **Solution:** Before wrapping any model output in nonce-tagged XML, escape any occurrence of the delimiter tag itself using HTML entity encoding. This is a belt-and-suspenders defense: even if the nonce leaks, the closing tag in the model's output is rendered inert.
 
 ```rust
-// crates/converge_core/src/prompts.rs
+// crates/refinery_core/src/prompts.rs
 
 /// Sanitize model output by escaping any occurrences of the delimiter tag.
 #[must_use]
@@ -93,7 +93,7 @@ This was caught as a P1 finding during the Codex review sweep.
 **Solution:** Escape `</review>` and `<review` occurrences in review text before embedding it in the refine prompt.
 
 ```rust
-// crates/converge_core/src/prompts.rs
+// crates/refinery_core/src/prompts.rs
 
 /// Sanitize model output by escaping `<review` / `</review>` tags to prevent
 /// tag injection in the refine prompt.
@@ -107,7 +107,7 @@ pub fn sanitize_for_review_tag(text: &str) -> String {
 Usage in the refine prompt builder:
 
 ```rust
-// crates/converge_core/src/prompts.rs
+// crates/refinery_core/src/prompts.rs
 
 pub fn refine_prompt(
     user_prompt: &str,
@@ -169,7 +169,7 @@ This is a soft defense -- it depends on the model obeying the instruction -- but
 **Solution:** Shuffle anonymous labels (A, B, C, ...) per round and use those labels instead of model identifiers in prompts. The mapping between model IDs and labels is randomized each round.
 
 ```rust
-// crates/converge_core/src/prompts.rs
+// crates/refinery_core/src/prompts.rs
 
 /// Generate shuffled anonymous labels for models.
 #[must_use]
@@ -188,7 +188,7 @@ pub fn shuffled_labels(count: usize) -> Vec<String> {
 Usage in the evaluate phase:
 
 ```rust
-// crates/converge_core/src/phases/evaluate.rs
+// crates/refinery_core/src/phases/evaluate.rs
 
 let labels: HashMap<&ModelId, String> = {
     let shuffled = prompts::shuffled_labels(model_ids.len());
@@ -209,7 +209,7 @@ The shuffle changes every round, so even if a model infers a mapping in round 1,
 **Solution:** Before passing extracted JSON to `serde_json::from_str`, run a lightweight character-level depth check that tracks brace/bracket nesting. If the depth exceeds the limit (10 levels), the response is rejected before any allocation-heavy parsing occurs.
 
 ```rust
-// crates/converge_core/src/prompts.rs
+// crates/refinery_core/src/prompts.rs
 
 /// Check JSON nesting depth. Returns `Err(actual_depth)` if exceeding `max_depth`.
 pub fn check_json_depth(text: &str, max_depth: usize) -> Result<(), usize> {
@@ -262,7 +262,7 @@ Key design choices:
 Usage in evaluation parsing:
 
 ```rust
-// crates/converge_core/src/phases/evaluate.rs
+// crates/refinery_core/src/phases/evaluate.rs
 
 // Check depth before parsing
 if let Err(depth) = prompts::check_json_depth(json_text, 10) {
@@ -281,7 +281,7 @@ if let Err(depth) = prompts::check_json_depth(json_text, 10) {
 **Solution:** The evaluation prompt requires models to provide structured rationale before the numeric score. The JSON schema places `rationale` before `score`, leveraging autoregressive generation order to ensure the model commits to reasoning before producing the number.
 
 ```rust
-// From the evaluate prompt (crates/converge_core/src/prompts.rs)
+// From the evaluate prompt (crates/refinery_core/src/prompts.rs)
 
 "Review the answer qualitatively AND score it on a 1-10 scale.\n\
  Think step by step about the answer's quality before scoring.\n\n\

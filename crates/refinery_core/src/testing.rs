@@ -139,7 +139,7 @@ impl ModelProvider for FailAfterNProvider {
 
 // --- Mock Strategies ---
 
-/// A strategy that always says "converge" starting from round N.
+/// A strategy that always says "refinery" starting from round N.
 pub struct AlwaysConvergeAfterN {
     min_rounds: u32,
 }

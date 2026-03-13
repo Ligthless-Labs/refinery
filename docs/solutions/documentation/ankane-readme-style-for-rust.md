@@ -36,7 +36,7 @@ It is recommended that you have Rust 1.85 or later installed.
 Install the CLI
 
 ```sh
-cargo install converge_cli
+cargo install refinery_cli
 ```
 
 Requires [Rust](https://www.rust-lang.org/tools/install) 1.85+.
@@ -67,7 +67,7 @@ numbered steps.
 ## Installation
 
 1. Make sure you have Rust installed
-2. Run `cargo install converge_cli`
+2. Run `cargo install refinery_cli`
 3. Verify the installation with `converge --version`
 ```
 
@@ -79,7 +79,7 @@ numbered steps.
 ### As a CLI
 
 ```sh
-cargo install converge_cli
+cargo install refinery_cli
 ```
 
 Requires [Rust](https://www.rust-lang.org/tools/install) 1.85+.
@@ -110,7 +110,7 @@ operations in a single block.
 
 ````markdown
 ```sh
-cargo install converge_cli
+cargo install refinery_cli
 converge "prompt" --models claude,codex
 converge "prompt" --models claude,codex --output-format json
 ```
@@ -122,7 +122,7 @@ converge "prompt" --models claude,codex --output-format json
 Install the CLI
 
 ```sh
-cargo install converge_cli
+cargo install refinery_cli
 ```
 
 Run a consensus session
@@ -326,7 +326,7 @@ Architecture reviewers and simplicity reviewers find complementary issues.
 
 **Architecture reviewers** catch:
 - Missing imports in code examples
-- Wrong package names (`converge-cli` vs `converge_cli`)
+- Wrong package names (`converge-cli` vs `refinery_cli`)
 - Incorrect API surfaces (methods that do not exist yet)
 - Broken cross-references between sections
 
@@ -353,7 +353,7 @@ cargo install converge-cli
 **Right:**
 
 ```sh
-cargo install converge_cli
+cargo install refinery_cli
 ```
 
 This is a common source of "package not found" errors. The crate name in
@@ -361,7 +361,7 @@ This is a common source of "package not found" errors. The crate name in
 
 ```toml
 [package]
-name = "converge_cli"
+name = "refinery_cli"
 ```
 
 Always verify the package name before writing install instructions. A reviewer
