@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{IsTerminal as _, Read as _};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -248,6 +249,7 @@ async fn main() -> ExitCode {
         label: None,
         started: std::time::Instant::now(),
         frame: 0,
+        scores: HashMap::new(),
     }));
 
     let tick_handle = if !cli.verbose && !cli.debug && std::io::stderr().is_terminal() {
@@ -559,18 +561,22 @@ struct SpinnerState {
     started: std::time::Instant,
     /// Frame counter, advanced by the tick task.
     frame: usize,
+    /// Per-model evaluation scores accumulated during the current round.
+    scores: HashMap<String, Vec<f64>>,
 }
 
 /// Handle a progress event by updating shared spinner state.
 ///
 /// `SubprocessOutput` sets the spinner message (the tick task renders it).
 /// All other events clear the spinner and print a final line.
+#[allow(clippy::too_many_lines)]
 fn render_progress(event: refinery_core::ProgressEvent, state: &Mutex<SpinnerState>) {
     use refinery_core::ProgressEvent;
     let mut s = state.lock().unwrap();
     match event {
         ProgressEvent::RoundStarted { round, total } => {
             s.label = None;
+            s.scores.clear();
             eprint!("\r\x1b[2K");
             eprintln!("\n  Round {round}/{total}");
         }
@@ -610,6 +616,10 @@ fn render_progress(event: refinery_core::ProgressEvent, state: &Mutex<SpinnerSta
             preview,
         } => {
             s.label = None;
+            s.scores
+                .entry(reviewee.to_string())
+                .or_default()
+                .push(score);
             eprintln!(
                 "\r\x1b[2K    \x1b[32m✓\x1b[0m {reviewer} → {reviewee}: {score:.1} — \"{preview}\""
             );
@@ -643,8 +653,10 @@ fn render_progress(event: refinery_core::ProgressEvent, state: &Mutex<SpinnerSta
         } => {
             s.label = None;
             eprint!("\r\x1b[2K");
+
+            let winner_name = winner.as_ref().map(std::string::ToString::to_string);
             if converged {
-                let w = winner.map_or_else(|| "?".to_string(), |m| m.to_string());
+                let w = winner_name.as_deref().unwrap_or("?");
                 eprintln!(
                     "  \x1b[32m→ Converged!\x1b[0m Winner: {w} ({best_score:.1} ≥ {threshold:.1}, stable {stable_rounds}/{required_stable})"
                 );
@@ -652,6 +664,30 @@ fn render_progress(event: refinery_core::ProgressEvent, state: &Mutex<SpinnerSta
                 eprintln!(
                     "  → Not converged ({best_score:.1}/{threshold:.1}, stable {stable_rounds}/{required_stable})"
                 );
+            }
+
+            // Round score summary table
+            if !s.scores.is_empty() {
+                let mut model_scores: Vec<(String, f64)> = s
+                    .scores
+                    .iter()
+                    .map(|(model, scores)| {
+                        #[allow(clippy::cast_precision_loss)] // model count is tiny
+                        let mean = scores.iter().sum::<f64>() / scores.len() as f64;
+                        (model.clone(), mean)
+                    })
+                    .collect();
+                model_scores
+                    .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+                let w = model_scores.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
+                for (name, score) in &model_scores {
+                    if winner_name.as_deref() == Some(name.as_str()) {
+                        eprintln!("    \x1b[32m{name:<w$}  {score:>4.1} ★\x1b[0m");
+                    } else {
+                        eprintln!("    {name:<w$}  {score:>4.1}");
+                    }
+                }
             }
         }
     }
