@@ -49,6 +49,13 @@ pub fn resolve_credential(
     resolve_credential_with(provider, candidates, |key| std::env::var(key))
 }
 
+/// Try env vars in order. Return `Some` on match, `None` when none are set.
+///
+/// Use this when a provider can fall back to the CLI's own stored credentials.
+pub fn try_resolve_credential(provider: &str, candidates: &[&'static str]) -> Option<Credential> {
+    resolve_credential(provider, candidates).ok()
+}
+
 /// Testable variant: accepts a custom env var reader.
 ///
 /// Avoids `std::env::set_var` (unsafe in Rust 2024 edition) in tests.

@@ -15,21 +15,25 @@ use crate::process;
 /// System prompt via: `--config developer_instructions="..."`
 ///
 /// Supports: `OPENAI_API_KEY` (pay-per-use) or `CODEX_API_KEY` (for `codex exec`).
+/// When neither is set, falls back to the Codex CLI's own stored credentials.
 #[derive(Debug)]
 pub struct CodexProvider {
     model_id: ModelId,
     binary_path: PathBuf,
-    credential: Credential,
+    credential: Option<Credential>,
     model_name: String,
     reasoning_effort: String,
     timeout: Duration,
 }
 
 impl CodexProvider {
-    /// Create a new Codex provider, validating credentials and binary.
+    /// Create a new Codex provider, resolving credentials and binary.
+    ///
+    /// Credentials are optional: if no env var is set the Codex CLI will use its own
+    /// stored authentication.
     pub async fn new(model_name: &str, reasoning_effort: &str, timeout: Duration) -> Result<Self, ProviderError> {
         let credential =
-            credential::resolve_credential("codex", &["OPENAI_API_KEY", "CODEX_API_KEY"])?;
+            credential::try_resolve_credential("codex", &["OPENAI_API_KEY", "CODEX_API_KEY"]);
 
         let binary_path = process::resolve_binary("codex").await?;
 
@@ -69,7 +73,14 @@ impl ModelProvider for CodexProvider {
         let args = self.build_args(&system_prompt, &user_prompt);
         let args_refs: Vec<&str> = args.iter().map(String::as_str).collect();
 
-        let env_vars = [self.credential.as_env_pair()];
+        let home = std::env::var("HOME").ok();
+        let mut env_vars: Vec<(&str, &str)> = Vec::new();
+        if let Some(ref cred) = self.credential {
+            env_vars.push(cred.as_env_pair());
+        }
+        if let Some(ref h) = home {
+            env_vars.push(("HOME", h.as_str()));
+        }
 
         let output = process::spawn_cli(
             &self.binary_path,
@@ -80,7 +91,7 @@ impl ModelProvider for CodexProvider {
         )
         .await?;
 
-        // Codex outputs JSONL, extract from turn.completed
+        // Codex outputs JSONL; extract from turn.completed
         process::extract_codex_response(&output)
     }
 
@@ -105,7 +116,7 @@ mod tests {
         let provider = CodexProvider {
             model_id: ModelId::new("codex-gpt-5.4"),
             binary_path: PathBuf::from("/usr/local/bin/codex"),
-            credential: test_credential(),
+            credential: Some(test_credential()),
             model_name: "gpt-5.4".to_string(),
             reasoning_effort: "xhigh".to_string(),
             timeout: Duration::from_secs(120),

@@ -15,20 +15,24 @@ use crate::process;
 /// System prompt via: `GEMINI_SYSTEM_MD` env var
 ///
 /// Supports: `GEMINI_API_KEY` (Google AI Studio) or `GOOGLE_API_KEY` (Vertex AI express mode).
+/// When neither is set, falls back to the Gemini CLI's own stored credentials (gcloud auth).
 #[derive(Debug)]
 pub struct GeminiProvider {
     model_id: ModelId,
     binary_path: PathBuf,
-    credential: Credential,
+    credential: Option<Credential>,
     model_name: String,
     timeout: Duration,
 }
 
 impl GeminiProvider {
-    /// Create a new Gemini provider, validating credentials and binary.
+    /// Create a new Gemini provider, resolving credentials and binary.
+    ///
+    /// Credentials are optional: if no env var is set the Gemini CLI will use its own
+    /// stored authentication (e.g. gcloud credentials).
     pub async fn new(model_name: &str, timeout: Duration) -> Result<Self, ProviderError> {
         let credential =
-            credential::resolve_credential("gemini", &["GEMINI_API_KEY", "GOOGLE_API_KEY"])?;
+            credential::try_resolve_credential("gemini", &["GEMINI_API_KEY", "GOOGLE_API_KEY"]);
 
         let binary_path = process::resolve_binary("gemini").await?;
 
@@ -66,11 +70,17 @@ impl ModelProvider for GeminiProvider {
         let args = self.build_args(&user_prompt);
         let args_refs: Vec<&str> = args.iter().map(String::as_str).collect();
 
-        // Gemini uses env var for system prompt (no --system-prompt flag)
-        let env_vars = [
-            self.credential.as_env_pair(),
-            ("GEMINI_SYSTEM_MD", system_prompt.as_str()),
-        ];
+        // Gemini uses env var for system prompt (no --system-prompt flag).
+        // Always pass HOME so the CLI can find gcloud/stored credentials.
+        let home = std::env::var("HOME").ok();
+        let mut env_vars: Vec<(&str, &str)> = Vec::new();
+        if let Some(ref cred) = self.credential {
+            env_vars.push(cred.as_env_pair());
+        }
+        env_vars.push(("GEMINI_SYSTEM_MD", system_prompt.as_str()));
+        if let Some(ref h) = home {
+            env_vars.push(("HOME", h.as_str()));
+        }
 
         let output = process::spawn_cli(
             &self.binary_path,
@@ -109,7 +119,7 @@ mod tests {
         let provider = GeminiProvider {
             model_id: ModelId::new("gemini-3.1-pro-preview"),
             binary_path: PathBuf::from("/usr/local/bin/gemini"),
-            credential: test_credential(),
+            credential: Some(test_credential()),
             model_name: "gemini-3.1-pro-preview".to_string(),
             timeout: Duration::from_secs(120),
         };

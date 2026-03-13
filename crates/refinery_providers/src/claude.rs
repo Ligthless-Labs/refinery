@@ -14,22 +14,26 @@ use crate::process;
 /// Invokes: `claude -p --output-format json --tools "" --max-turns 1 --effort high --model claude-opus-4-6 --append-system-prompt "SYSTEM" -- "PROMPT"`
 ///
 /// Supports: `ANTHROPIC_API_KEY` (pay-per-use) or `CLAUDE_CODE_OAUTH_TOKEN` (Pro/Max subscription).
+/// When neither is set, falls back to the Claude CLI's own stored credentials (`~/.claude.json`).
 #[derive(Debug)]
 pub struct ClaudeProvider {
     model_id: ModelId,
     binary_path: PathBuf,
-    credential: Credential,
+    credential: Option<Credential>,
     model_name: String,
     timeout: Duration,
 }
 
 impl ClaudeProvider {
-    /// Create a new Claude provider, validating credentials and binary.
+    /// Create a new Claude provider, resolving credentials and binary.
+    ///
+    /// Credentials are optional: if no env var is set the Claude CLI will use its own
+    /// stored authentication (e.g. `~/.claude.json`).
     pub async fn new(model_name: &str, timeout: Duration) -> Result<Self, ProviderError> {
-        let credential = credential::resolve_credential(
+        let credential = credential::try_resolve_credential(
             "claude",
             &["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"],
-        )?;
+        );
 
         let binary_path = process::resolve_binary("claude").await?;
 
@@ -71,15 +75,14 @@ impl ModelProvider for ClaudeProvider {
         let args = self.build_args(&system_prompt, &user_prompt);
         let args_refs: Vec<&str> = args.iter().map(String::as_str).collect();
 
-        // Claude CLI needs HOME to find ~/.claude.json (onboarding config)
-        let home = if self.credential.env_var() == "CLAUDE_CODE_OAUTH_TOKEN" {
-            std::env::var("HOME").ok()
-        } else {
-            None
-        };
-        let mut env_vars = vec![self.credential.as_env_pair()];
-        if let Some(ref home) = home {
-            env_vars.push(("HOME", home.as_str()));
+        // Always pass HOME so the CLI can find ~/.claude.json for stored credentials.
+        let home = std::env::var("HOME").ok();
+        let mut env_vars: Vec<(&str, &str)> = Vec::new();
+        if let Some(ref cred) = self.credential {
+            env_vars.push(cred.as_env_pair());
+        }
+        if let Some(ref h) = home {
+            env_vars.push(("HOME", h.as_str()));
         }
 
         let output = process::spawn_cli(
@@ -117,7 +120,7 @@ mod tests {
         let provider = ClaudeProvider {
             model_id: ModelId::new("claude-opus-4-6"),
             binary_path: PathBuf::from("/usr/local/bin/claude"),
-            credential: test_credential(),
+            credential: Some(test_credential()),
             model_name: "opus-4-6".to_string(),
             timeout: Duration::from_secs(120),
         };
