@@ -250,7 +250,7 @@ pub fn extract_prompts(messages: &[Message]) -> (String, String) {
 /// `{"type":"turn.completed","text":"{\"answer\":\"...\"}"}`, so we parse
 /// the `text` field as JSON and extract `answer`.
 pub fn extract_codex_response(jsonl: &str) -> Result<String, ProviderError> {
-    let model = ModelId::new("codex");
+    let model = ModelId::from_parts("codex-cli", "unknown");
     let preview: String = jsonl.chars().take(200).collect();
 
     for line in jsonl.lines().rev() {
@@ -295,7 +295,7 @@ pub fn extract_codex_response(jsonl: &str) -> Result<String, ProviderError> {
 ///
 /// Handles Issue #11184: response field may contain markdown-wrapped JSON.
 pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError> {
-    let model = ModelId::new("gemini");
+    let model = ModelId::from_parts("gemini-cli", "unknown");
 
     let parsed: serde_json::Value =
         serde_json::from_str(json_text).map_err(|e| ProviderError::InvalidJson {
@@ -338,7 +338,7 @@ pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError>
 ///
 /// Also accepts `--output-format json` (a JSON array) for backwards compatibility.
 pub fn extract_claude_response(output: &str) -> Result<String, ProviderError> {
-    let model = ModelId::new("claude");
+    let model = ModelId::from_parts("claude-code", "unknown");
     let preview: String = output.chars().take(200).collect();
 
     // Try JSONL first (stream-json format): parse each line independently

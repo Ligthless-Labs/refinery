@@ -43,7 +43,7 @@ impl CodexProvider {
     /// Credentials are optional: if no env var is set the Codex CLI will use its own
     /// stored authentication.
     pub async fn new(
-        model_name: &str,
+        model_id: ModelId,
         reasoning_effort: &str,
         max_timeout: Duration,
         idle_timeout: Duration,
@@ -53,12 +53,13 @@ impl CodexProvider {
             credential::try_resolve_credential("codex", &["OPENAI_API_KEY", "CODEX_API_KEY"]);
 
         let binary_path = process::resolve_binary("codex").await?;
+        let model_name = model_id.model().to_string();
 
         Ok(Self {
-            model_id: ModelId::new(format!("codex-{model_name}")),
+            model_id,
             binary_path,
             credential,
-            model_name: model_name.to_string(),
+            model_name,
             reasoning_effort: reasoning_effort.to_string(),
             max_timeout,
             idle_timeout,
@@ -150,7 +151,7 @@ mod tests {
     #[test]
     fn build_args_contains_required_flags() {
         let provider = CodexProvider {
-            model_id: ModelId::new("codex-gpt-5.4"),
+            model_id: ModelId::from_parts("codex-cli", "gpt-5.4"),
             binary_path: PathBuf::from("/usr/local/bin/codex"),
             credential: Some(test_credential()),
             model_name: "gpt-5.4".to_string(),

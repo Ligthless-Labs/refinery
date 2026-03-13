@@ -45,7 +45,7 @@ impl ClaudeProvider {
     /// Credentials are optional: if no env var is set the Claude CLI will use its own
     /// stored authentication (e.g. `~/.claude.json`).
     pub async fn new(
-        model_name: &str,
+        model_id: ModelId,
         max_timeout: Duration,
         idle_timeout: Duration,
         progress: Option<ProgressFn>,
@@ -56,12 +56,13 @@ impl ClaudeProvider {
         );
 
         let binary_path = process::resolve_binary("claude").await?;
+        let model_name = model_id.model().to_string();
 
         Ok(Self {
-            model_id: ModelId::new(format!("claude-{model_name}")),
+            model_id,
             binary_path,
             credential,
-            model_name: model_name.to_string(),
+            model_name,
             max_timeout,
             idle_timeout,
             progress,
@@ -82,7 +83,7 @@ impl ClaudeProvider {
             "--effort".to_string(),
             "high".to_string(),
             "--model".to_string(),
-            format!("claude-{}", self.model_name),
+            self.model_name.clone(),
             "--append-system-prompt".to_string(),
             system_prompt.to_string(),
             "--".to_string(),
@@ -144,7 +145,7 @@ mod tests {
     #[test]
     fn build_args_contains_required_flags() {
         let provider = ClaudeProvider {
-            model_id: ModelId::new("claude-opus-4-6"),
+            model_id: ModelId::from_parts("claude-code", "claude-opus-4-6"),
             binary_path: PathBuf::from("/usr/local/bin/claude"),
             credential: Some(test_credential()),
             model_name: "opus-4-6".to_string(),
