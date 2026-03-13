@@ -156,7 +156,8 @@ pub async fn spawn_cli(
                 Ok(Ok(0)) => break, // EOF
                 Ok(Ok(_)) => {
                     line_count += 1;
-                    debug!(model = %model_clone, line = %line_buf.trim_end(), "stream event");
+                    let preview: String = line_buf.trim_end().chars().take(200).collect();
+                    debug!(model = %model_clone, line = %preview, "stream event");
                     if let Some(ref cb) = progress {
                         cb(ProgressEvent::SubprocessOutput {
                             model: model_clone.clone(),
@@ -199,11 +200,14 @@ pub async fn spawn_cli(
     match result {
         Ok(Ok(stdout)) => {
             // Wait for process exit and collect stderr from the drain task
-            let status = child.wait().await.map_err(|e| ProviderError::ProcessFailed {
-                model: model.clone(),
-                message: e.to_string(),
-                exit_code: None,
-            })?;
+            let status = child
+                .wait()
+                .await
+                .map_err(|e| ProviderError::ProcessFailed {
+                    model: model.clone(),
+                    message: e.to_string(),
+                    exit_code: None,
+                })?;
 
             let stderr = stderr_task.await.unwrap_or_default();
 
@@ -257,10 +261,14 @@ pub fn extract_prompts(messages: &[Message]) -> (String, String) {
 
 /// Extract the response text from a Codex JSONL event stream.
 ///
-/// Parses all JSONL lines and finds the last `turn.completed` event.
-/// With `--output-schema`, Codex validates the final response and emits
-/// `{"type":"turn.completed","text":"{\"answer\":\"...\"}"}`, so we parse
-/// the `text` field as JSON and extract `answer`.
+/// Parses all JSONL lines in reverse and finds the last completion event.
+/// Supports two event formats:
+/// - `item.completed`: `{"type":"item.completed","item":{"text":"{\"answer\":\"...\"}"}}`
+/// - `turn.completed`: `{"type":"turn.completed","text":"{\"answer\":\"...\"}"}`
+///
+/// With `--output-schema`, the `text` field contains JSON (`{"answer":"..."}`),
+/// which is parsed to extract the `answer` value. Without a schema, `text` is
+/// returned as-is.
 pub fn extract_codex_response(jsonl: &str) -> Result<String, ProviderError> {
     let model = ModelId::from_parts("codex-cli", "unknown");
     let preview: String = jsonl.chars().take(200).collect();
@@ -404,9 +412,7 @@ pub fn extract_claude_response(output: &str) -> Result<String, ProviderError> {
 
     Err(ProviderError::InvalidJson {
         model,
-        message: format!(
-            "no result event with structured_output found in stream (raw: {preview})"
-        ),
+        message: format!("no result event with structured_output found in stream (raw: {preview})"),
     })
 }
 
@@ -419,6 +425,16 @@ mod tests {
         let json = r#"[{"type":"system","subtype":"init"},{"type":"assistant","message":{"content":[{"type":"text","text":"Hello!"}]}},{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"answer":"Hello! How can I help you today?"}}]"#;
         let result = extract_claude_response(json).unwrap();
         assert_eq!(result, "Hello! How can I help you today?");
+    }
+
+    #[test]
+    fn extract_claude_stream_json_jsonl() {
+        // stream-json format: one JSON object per line (JSONL)
+        let jsonl = r#"{"type":"system","subtype":"init","session_id":"abc123"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Thinking..."}]}}
+{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"answer":"Stream JSON answer"}}"#;
+        let result = extract_claude_response(jsonl).unwrap();
+        assert_eq!(result, "Stream JSON answer");
     }
 
     #[test]

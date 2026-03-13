@@ -293,8 +293,14 @@ async fn main() -> ExitCode {
     let mut providers: Vec<Arc<dyn ModelProvider>> = Vec::new();
 
     for model_id in &model_ids {
-        match build_provider(model_id, &cli.allow_tools, timeout, idle_timeout, progress.clone())
-            .await
+        match build_provider(
+            model_id,
+            &cli.allow_tools,
+            timeout,
+            idle_timeout,
+            progress.clone(),
+        )
+        .await
         {
             Ok(p) => providers.push(p),
             Err(e) => {
@@ -617,11 +623,7 @@ fn render_progress(event: refinery_core::ProgressEvent, state: &Mutex<SpinnerSta
             eprint!("\r\x1b[2K");
             eprintln!("  ── {phase} ──");
         }
-        ProgressEvent::SubprocessOutput {
-            model,
-            lines,
-            ..
-        } => {
+        ProgressEvent::SubprocessOutput { model, lines, .. } => {
             if s.label.is_none() {
                 s.started = std::time::Instant::now();
             }
@@ -662,9 +664,7 @@ fn render_progress(event: refinery_core::ProgressEvent, state: &Mutex<SpinnerSta
             error,
         } => {
             s.label = None;
-            eprintln!(
-                "\r\x1b[2K    \x1b[31m✗\x1b[0m {reviewer} → {reviewee} failed — {error}"
-            );
+            eprintln!("\r\x1b[2K    \x1b[31m✗\x1b[0m {reviewer} → {reviewee} failed — {error}");
         }
         ProgressEvent::ConvergenceCheck {
             converged,

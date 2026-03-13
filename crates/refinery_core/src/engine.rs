@@ -65,9 +65,7 @@ impl Engine {
                 Ok(o) => o,
                 Err(ConvergeError::InsufficientModels { round, .. }) if round > 1 => {
                     // Graceful degradation: return best-so-far from prior rounds
-                    return Ok(
-                        session.finalize_with_status(ConvergenceStatus::InsufficientModels),
-                    );
+                    return Ok(session.finalize_with_status(ConvergenceStatus::InsufficientModels));
                 }
                 Err(e) => return Err(e),
             };
@@ -250,7 +248,10 @@ impl Session<'_> {
             self.config.threshold,
             self.config.stability_rounds,
             &previous_scores,
-            self.current_winner.as_ref().map(std::string::ToString::to_string).as_deref(),
+            self.current_winner
+                .as_ref()
+                .map(std::string::ToString::to_string)
+                .as_deref(),
             self.stable_rounds,
             false,
         );
@@ -325,7 +326,10 @@ impl Session<'_> {
                 .iter()
                 .filter(|((_, evaluatee), _)| evaluatee == model_id)
                 .map(|((evaluator, _), eval)| {
-                    (evaluator.to_string(), eval.review.overall_assessment.clone())
+                    (
+                        evaluator.to_string(),
+                        eval.review.overall_assessment.clone(),
+                    )
                 })
                 .collect();
             self.model_histories
@@ -410,7 +414,10 @@ impl Session<'_> {
         }
     }
 
-    fn finalize_with_status(self, status: ConvergenceStatus) -> (ConsensusOutcome, Vec<RoundOutcome>) {
+    fn finalize_with_status(
+        self,
+        status: ConvergenceStatus,
+    ) -> (ConsensusOutcome, Vec<RoundOutcome>) {
         let winner = self
             .current_winner
             .unwrap_or_else(|| ModelId::from_parts("unknown", "unknown"));
@@ -456,7 +463,9 @@ mod tests {
     }
 
     fn default_config(n: usize) -> EngineConfig {
-        let models: Vec<ModelId> = (0..n).map(|i| ModelId::new(format!("test/model_{i}"))).collect();
+        let models: Vec<ModelId> = (0..n)
+            .map(|i| ModelId::new(format!("test/model_{i}")))
+            .collect();
         EngineConfig::new(models, 5, 8.0, 2, std::time::Duration::from_secs(120), 10).unwrap()
     }
 

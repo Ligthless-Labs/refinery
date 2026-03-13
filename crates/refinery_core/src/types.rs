@@ -26,7 +26,8 @@ impl ModelId {
     #[must_use]
     pub fn new(s: impl Into<String>) -> Self {
         let s = s.into();
-        Self::parse(&s).unwrap_or_else(|_| panic!("invalid ModelId format: '{s}' (expected 'provider/model')"))
+        Self::parse(&s)
+            .unwrap_or_else(|_| panic!("invalid ModelId format: '{s}' (expected 'provider/model')"))
     }
 
     /// Parse a `"provider/model"` string, returning `Err` on invalid format.
@@ -463,8 +464,9 @@ mod tests {
 
     #[test]
     fn estimate_calls_per_round() {
-        let models =
-            |n: usize| -> Vec<ModelId> { (0..n).map(|i| ModelId::new(format!("test/m{i}"))).collect() };
+        let models = |n: usize| -> Vec<ModelId> {
+            (0..n).map(|i| ModelId::new(format!("test/m{i}"))).collect()
+        };
 
         // N=2: 2² = 4
         let config = EngineConfig::new(models(2), 5, 8.0, 2, Duration::from_secs(120), 10).unwrap();
