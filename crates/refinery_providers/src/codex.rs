@@ -8,7 +8,7 @@ use refinery_core::progress::ProgressFn;
 use refinery_core::types::{Message, ModelId};
 
 use crate::credential::{self, Credential};
-use crate::process;
+use crate::{process, tools};
 
 /// Codex CLI provider adapter.
 ///
@@ -23,6 +23,7 @@ pub struct CodexProvider {
     credential: Option<Credential>,
     model_name: String,
     reasoning_effort: String,
+    allowed_tools: Vec<String>,
     max_timeout: Duration,
     idle_timeout: Duration,
     progress: Option<ProgressFn>,
@@ -45,6 +46,7 @@ impl CodexProvider {
     pub async fn new(
         model_id: ModelId,
         reasoning_effort: &str,
+        canonical_tools: &[String],
         max_timeout: Duration,
         idle_timeout: Duration,
         progress: Option<ProgressFn>,
@@ -55,12 +57,18 @@ impl CodexProvider {
         let binary_path = process::resolve_binary("codex").await?;
         let model_name = model_id.model().to_string();
 
+        let (allowed_tools, unknown) = tools::resolve(canonical_tools, tools::codex_tool);
+        for name in &unknown {
+            tracing::warn!(provider = "codex", tool = %name, "unknown tool, skipping");
+        }
+
         Ok(Self {
             model_id,
             binary_path,
             credential,
             model_name,
             reasoning_effort: reasoning_effort.to_string(),
+            allowed_tools,
             max_timeout,
             idle_timeout,
             progress,
@@ -68,7 +76,7 @@ impl CodexProvider {
     }
 
     fn build_args(&self, system_prompt: &str, user_prompt: &str, schema_path: &str) -> Vec<String> {
-        vec![
+        let mut args = vec![
             "exec".to_string(),
             "--json".to_string(),
             "--sandbox".to_string(),
@@ -81,9 +89,15 @@ impl CodexProvider {
             format!("model_reasoning_effort={}", self.reasoning_effort),
             "--config".to_string(),
             format!("developer_instructions={system_prompt}"),
-            "--".to_string(),
-            user_prompt.to_string(),
-        ]
+        ];
+
+        if self.allowed_tools.iter().any(|t| t == "web_search") {
+            args.push("--enable-web-search".to_string());
+        }
+
+        args.push("--".to_string());
+        args.push(user_prompt.to_string());
+        args
     }
 }
 
@@ -156,6 +170,7 @@ mod tests {
             credential: Some(test_credential()),
             model_name: "gpt-5.4".to_string(),
             reasoning_effort: "xhigh".to_string(),
+            allowed_tools: vec![],
             max_timeout: Duration::from_secs(1800),
             idle_timeout: Duration::from_secs(120),
             progress: None,

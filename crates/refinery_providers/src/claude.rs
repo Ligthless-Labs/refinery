@@ -8,7 +8,7 @@ use refinery_core::progress::ProgressFn;
 use refinery_core::types::{Message, ModelId};
 
 use crate::credential::{self, Credential};
-use crate::process;
+use crate::{process, tools};
 
 /// Claude CLI provider adapter.
 ///
@@ -25,6 +25,7 @@ pub struct ClaudeProvider {
     binary_path: PathBuf,
     credential: Option<Credential>,
     model_name: String,
+    allowed_tools: Vec<String>,
     max_timeout: Duration,
     idle_timeout: Duration,
     progress: Option<ProgressFn>,
@@ -46,6 +47,7 @@ impl ClaudeProvider {
     /// stored authentication (e.g. `~/.claude.json`).
     pub async fn new(
         model_id: ModelId,
+        canonical_tools: &[String],
         max_timeout: Duration,
         idle_timeout: Duration,
         progress: Option<ProgressFn>,
@@ -58,11 +60,17 @@ impl ClaudeProvider {
         let binary_path = process::resolve_binary("claude").await?;
         let model_name = model_id.model().to_string();
 
+        let (allowed_tools, unknown) = tools::resolve(canonical_tools, tools::claude_tool);
+        for name in &unknown {
+            tracing::warn!(provider = "claude", tool = %name, "unknown tool, skipping");
+        }
+
         Ok(Self {
             model_id,
             binary_path,
             credential,
             model_name,
+            allowed_tools,
             max_timeout,
             idle_timeout,
             progress,
@@ -70,7 +78,7 @@ impl ClaudeProvider {
     }
 
     fn build_args(&self, system_prompt: &str, user_prompt: &str) -> Vec<String> {
-        vec![
+        let mut args = vec![
             "-p".to_string(),
             "--verbose".to_string(), // required for stream-json in print mode
             "--output-format".to_string(),
@@ -86,9 +94,20 @@ impl ClaudeProvider {
             self.model_name.clone(),
             "--append-system-prompt".to_string(),
             system_prompt.to_string(),
-            "--".to_string(),
-            user_prompt.to_string(),
-        ]
+        ];
+
+        if self.allowed_tools.is_empty() {
+            // No tools requested — disable all tools
+            args.push("--tools".to_string());
+            args.push(String::new());
+        } else {
+            args.push("--allowedTools".to_string());
+            args.push(self.allowed_tools.join(","));
+        }
+
+        args.push("--".to_string());
+        args.push(user_prompt.to_string());
+        args
     }
 }
 
@@ -149,6 +168,7 @@ mod tests {
             binary_path: PathBuf::from("/usr/local/bin/claude"),
             credential: Some(test_credential()),
             model_name: "opus-4-6".to_string(),
+            allowed_tools: vec![],
             max_timeout: Duration::from_secs(1800),
             idle_timeout: Duration::from_secs(120),
             progress: None,
