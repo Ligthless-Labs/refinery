@@ -1,7 +1,7 @@
 use std::io::{IsTerminal as _, Read as _};
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use clap::Parser;
@@ -242,13 +242,39 @@ async fn main() -> ExitCode {
     let timeout = Duration::from_secs(cli.timeout);
     let idle_timeout = Duration::from_secs(cli.idle_timeout);
 
-    // Progress display when stderr is a terminal and not in verbose/debug mode
-    let progress: Option<refinery_core::ProgressFn> =
-        if !cli.verbose && !cli.debug && std::io::stderr().is_terminal() {
-            Some(Arc::new(render_progress))
-        } else {
-            None
-        };
+    // Animated spinner: a background task ticks the frame at ~80ms, while
+    // progress events just update the shared status text.
+    let spinner_state = Arc::new(Mutex::new(SpinnerState {
+        label: None,
+        started: std::time::Instant::now(),
+        frame: 0,
+    }));
+
+    let tick_handle = if !cli.verbose && !cli.debug && std::io::stderr().is_terminal() {
+        let state = spinner_state.clone();
+        Some(tokio::spawn(async move {
+            const FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+            loop {
+                tokio::time::sleep(Duration::from_millis(80)).await;
+                let mut s = state.lock().unwrap();
+                if let Some(ref label) = s.label {
+                    let spin = FRAMES[s.frame % FRAMES.len()];
+                    let elapsed = s.started.elapsed().as_secs();
+                    eprint!("\r\x1b[2K    {spin} {label}, {elapsed}s");
+                    s.frame += 1;
+                }
+            }
+        }))
+    } else {
+        None
+    };
+
+    let progress: Option<refinery_core::ProgressFn> = if tick_handle.is_some() {
+        let state = spinner_state.clone();
+        Some(Arc::new(move |event| render_progress(event, &state)))
+    } else {
+        None
+    };
 
     let mut providers: Vec<Arc<dyn ModelProvider>> = Vec::new();
 
@@ -269,8 +295,9 @@ async fn main() -> ExitCode {
 
     let run_result = engine.run(&prompt).await;
 
-    // Clear the in-place progress line before printing output
-    if progress.is_some() {
+    // Stop the spinner tick task and clear the progress line
+    if let Some(handle) = tick_handle {
+        handle.abort();
         eprint!("\r\x1b[2K");
     }
 
@@ -523,37 +550,57 @@ fn save_round_artifacts(
     Ok(())
 }
 
-fn render_progress(event: refinery_core::ProgressEvent) {
+/// Shared state between the progress callback and the background spinner tick task.
+struct SpinnerState {
+    /// Current in-progress label, e.g. "claude-opus-4-6 — 42 lines".
+    /// The tick task appends the live elapsed time. None = spinner idle.
+    label: Option<String>,
+    /// When the current subprocess started (for live elapsed timer).
+    started: std::time::Instant,
+    /// Frame counter, advanced by the tick task.
+    frame: usize,
+}
+
+/// Handle a progress event by updating shared spinner state.
+///
+/// `SubprocessOutput` sets the spinner message (the tick task renders it).
+/// All other events clear the spinner and print a final line.
+fn render_progress(event: refinery_core::ProgressEvent, state: &Mutex<SpinnerState>) {
     use refinery_core::ProgressEvent;
-    const SPINNER: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    let mut s = state.lock().unwrap();
     match event {
         ProgressEvent::RoundStarted { round, total } => {
+            s.label = None;
+            eprint!("\r\x1b[2K");
             eprintln!("\n  Round {round}/{total}");
         }
         ProgressEvent::PhaseStarted { phase, .. } => {
+            s.label = None;
+            eprint!("\r\x1b[2K");
             eprintln!("  ── {phase} ──");
         }
         ProgressEvent::SubprocessOutput {
             model,
             lines,
-            elapsed,
+            ..
         } => {
-            let spin = SPINNER[lines % SPINNER.len()];
-            eprint!(
-                "\r\x1b[2K    {spin} {model} — {lines} lines, {}s",
-                elapsed.as_secs()
-            );
+            if s.label.is_none() {
+                s.started = std::time::Instant::now();
+            }
+            s.label = Some(format!("{model} — {lines} lines"));
         }
         ProgressEvent::ModelProposed {
             model,
             word_count,
             preview,
         } => {
+            s.label = None;
             eprintln!(
                 "\r\x1b[2K    \x1b[32m✓\x1b[0m {model} proposed ({word_count} words) — \"{preview}\""
             );
         }
         ProgressEvent::ModelProposeFailed { model, error } => {
+            s.label = None;
             eprintln!("\r\x1b[2K    \x1b[31m✗\x1b[0m {model} failed — {error}");
         }
         ProgressEvent::EvaluationCompleted {
@@ -562,6 +609,7 @@ fn render_progress(event: refinery_core::ProgressEvent) {
             score,
             preview,
         } => {
+            s.label = None;
             eprintln!(
                 "\r\x1b[2K    \x1b[32m✓\x1b[0m {reviewer} → {reviewee}: {score:.1} — \"{preview}\""
             );
@@ -571,14 +619,17 @@ fn render_progress(event: refinery_core::ProgressEvent) {
             reviewee,
             error,
         } => {
+            s.label = None;
             eprintln!(
                 "\r\x1b[2K    \x1b[31m✗\x1b[0m {reviewer} → {reviewee} failed — {error}"
             );
         }
         ProgressEvent::ModelRefined { model, word_count } => {
+            s.label = None;
             eprintln!("\r\x1b[2K    \x1b[32m✓\x1b[0m {model} refined ({word_count} words)");
         }
         ProgressEvent::ModelRefineFailed { model, error } => {
+            s.label = None;
             eprintln!("\r\x1b[2K    \x1b[31m✗\x1b[0m {model} refine failed — {error}");
         }
         ProgressEvent::ConvergenceCheck {
@@ -590,6 +641,8 @@ fn render_progress(event: refinery_core::ProgressEvent) {
             required_stable,
             ..
         } => {
+            s.label = None;
+            eprint!("\r\x1b[2K");
             if converged {
                 let w = winner.map_or_else(|| "?".to_string(), |m| m.to_string());
                 eprintln!(
