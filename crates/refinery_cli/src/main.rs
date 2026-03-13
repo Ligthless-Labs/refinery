@@ -9,7 +9,7 @@ use clap::Parser;
 use serde::Serialize;
 use tracing::info;
 
-use refinery_core::types::{ConvergenceStatus, ModelId};
+use refinery_core::types::{ConvergenceStatus, ModelId, RoundOutcome};
 use refinery_core::{EngineConfig, ModelProvider};
 
 /// Iterative multi-model consensus engine.
@@ -62,6 +62,15 @@ struct Cli {
     /// Show raw CLI invocations and responses
     #[arg(long)]
     debug: bool,
+
+    /// Tools to allow: `web_fetch`, `web_search`, `file_read`, `file_write`, `shell`.
+    /// Mapped to each provider's native tool names automatically.
+    #[arg(long = "allow-tools", value_delimiter = ',')]
+    allow_tools: Vec<String>,
+
+    /// Directory to save per-round artifacts (proposals, evaluations)
+    #[arg(long = "output-dir", value_name = "DIR")]
+    output_dir: Option<PathBuf>,
 
     /// Show estimated call count and cost, then exit
     #[arg(long)]
@@ -284,7 +293,9 @@ async fn main() -> ExitCode {
     let mut providers: Vec<Arc<dyn ModelProvider>> = Vec::new();
 
     for model_id in &model_ids {
-        match build_provider(model_id, timeout, idle_timeout, progress.clone()).await {
+        match build_provider(model_id, &cli.allow_tools, timeout, idle_timeout, progress.clone())
+            .await
+        {
             Ok(p) => providers.push(p),
             Err(e) => {
                 eprintln!("Failed to initialize provider '{model_id}': {e}");
@@ -307,7 +318,14 @@ async fn main() -> ExitCode {
     }
 
     match run_result {
-        Ok(outcome) => {
+        Ok((outcome, rounds)) => {
+            // Save per-round artifacts if --output-dir is set
+            if let Some(ref dir) = cli.output_dir {
+                if let Err(e) = save_round_artifacts(dir, &rounds) {
+                    eprintln!("Warning: failed to save artifacts: {e}");
+                }
+            }
+
             match cli.output_format {
                 OutputFormat::Json => {
                     let status_str = match serde_json::to_value(&outcome.status) {
@@ -480,6 +498,7 @@ fn parse_model_spec(input: &str) -> Result<ModelId, String> {
 
 async fn build_provider(
     model_id: &ModelId,
+    allowed_tools: &[String],
     max_timeout: Duration,
     idle_timeout: Duration,
     progress: Option<refinery_core::ProgressFn>,
@@ -488,6 +507,7 @@ async fn build_provider(
         "claude-code" => {
             let provider = refinery_providers::claude::ClaudeProvider::new(
                 model_id.clone(),
+                allowed_tools,
                 max_timeout,
                 idle_timeout,
                 progress,
@@ -499,6 +519,7 @@ async fn build_provider(
             let provider = refinery_providers::codex::CodexProvider::new(
                 model_id.clone(),
                 "xhigh",
+                allowed_tools,
                 max_timeout,
                 idle_timeout,
                 progress,
@@ -509,6 +530,7 @@ async fn build_provider(
         "gemini-cli" => {
             let provider = refinery_providers::gemini::GeminiProvider::new(
                 model_id.clone(),
+                allowed_tools,
                 max_timeout,
                 idle_timeout,
                 progress,
@@ -521,6 +543,42 @@ async fn build_provider(
         )
         .into()),
     }
+}
+
+fn save_round_artifacts(
+    base_dir: &std::path::Path,
+    rounds: &[RoundOutcome],
+) -> Result<(), Box<dyn std::error::Error>> {
+    std::fs::create_dir_all(base_dir)?;
+
+    for round in rounds {
+        let round_dir = base_dir.join(format!("round-{}", round.round));
+        std::fs::create_dir_all(&round_dir)?;
+
+        // Proposals: one file per model
+        for (model_id, text) in &round.proposals.proposals {
+            let path = round_dir.join(format!("propose-{model_id}.md"));
+            std::fs::write(&path, text)?;
+        }
+
+        // Evaluations: one file per (evaluator, evaluatee) pair
+        for ((evaluator, evaluatee), eval) in &round.evaluations.evaluations {
+            let path = round_dir.join(format!("evaluate-{evaluator}-{evaluatee}.json"));
+            let content = serde_json::json!({
+                "evaluator": evaluator.to_string(),
+                "evaluatee": evaluatee.to_string(),
+                "score": eval.score.value(),
+                "rationale": eval.rationale,
+                "strengths": eval.review.strengths,
+                "weaknesses": eval.review.weaknesses,
+                "suggestions": eval.review.suggestions,
+                "overall_assessment": eval.review.overall_assessment,
+            });
+            std::fs::write(&path, serde_json::to_string_pretty(&content)?)?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Shared state between the progress callback and the background spinner tick task.
