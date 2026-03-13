@@ -22,7 +22,8 @@ pub struct GeminiProvider {
     binary_path: PathBuf,
     credential: Option<Credential>,
     model_name: String,
-    timeout: Duration,
+    max_timeout: Duration,
+    idle_timeout: Duration,
 }
 
 impl GeminiProvider {
@@ -30,7 +31,11 @@ impl GeminiProvider {
     ///
     /// Credentials are optional: if no env var is set the Gemini CLI will use its own
     /// stored authentication (e.g. gcloud credentials).
-    pub async fn new(model_name: &str, timeout: Duration) -> Result<Self, ProviderError> {
+    pub async fn new(
+        model_name: &str,
+        max_timeout: Duration,
+        idle_timeout: Duration,
+    ) -> Result<Self, ProviderError> {
         let credential =
             credential::try_resolve_credential("gemini", &["GEMINI_API_KEY", "GOOGLE_API_KEY"]);
 
@@ -41,7 +46,8 @@ impl GeminiProvider {
             binary_path,
             credential,
             model_name: model_name.to_string(),
-            timeout,
+            max_timeout,
+            idle_timeout,
         })
     }
 
@@ -95,7 +101,8 @@ impl ModelProvider for GeminiProvider {
             &self.binary_path,
             &args_refs,
             &env_vars,
-            self.timeout,
+            self.max_timeout,
+            self.idle_timeout,
             &self.model_id,
         )
         .await;
@@ -132,7 +139,8 @@ mod tests {
             binary_path: PathBuf::from("/usr/local/bin/gemini"),
             credential: Some(test_credential()),
             model_name: "gemini-3.1-pro-preview".to_string(),
-            timeout: Duration::from_secs(120),
+            max_timeout: Duration::from_secs(1800),
+            idle_timeout: Duration::from_secs(120),
         };
 
         let args = provider.build_args("user prompt");

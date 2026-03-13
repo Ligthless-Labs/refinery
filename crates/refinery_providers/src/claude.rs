@@ -25,7 +25,8 @@ pub struct ClaudeProvider {
     binary_path: PathBuf,
     credential: Option<Credential>,
     model_name: String,
-    timeout: Duration,
+    max_timeout: Duration,
+    idle_timeout: Duration,
 }
 
 impl ClaudeProvider {
@@ -33,7 +34,11 @@ impl ClaudeProvider {
     ///
     /// Credentials are optional: if no env var is set the Claude CLI will use its own
     /// stored authentication (e.g. `~/.claude.json`).
-    pub async fn new(model_name: &str, timeout: Duration) -> Result<Self, ProviderError> {
+    pub async fn new(
+        model_name: &str,
+        max_timeout: Duration,
+        idle_timeout: Duration,
+    ) -> Result<Self, ProviderError> {
         let credential = credential::try_resolve_credential(
             "claude",
             &["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"],
@@ -46,7 +51,8 @@ impl ClaudeProvider {
             binary_path,
             credential,
             model_name: model_name.to_string(),
-            timeout,
+            max_timeout,
+            idle_timeout,
         })
     }
 
@@ -54,7 +60,7 @@ impl ClaudeProvider {
         vec![
             "-p".to_string(),
             "--output-format".to_string(),
-            "json".to_string(),
+            "stream-json".to_string(),
             "--json-schema".to_string(),
             r#"{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}"#
                 .to_string(),
@@ -94,7 +100,8 @@ impl ModelProvider for ClaudeProvider {
             &self.binary_path,
             &args_refs,
             &env_vars,
-            self.timeout,
+            self.max_timeout,
+            self.idle_timeout,
             &self.model_id,
         )
         .await?;
@@ -127,14 +134,15 @@ mod tests {
             binary_path: PathBuf::from("/usr/local/bin/claude"),
             credential: Some(test_credential()),
             model_name: "opus-4-6".to_string(),
-            timeout: Duration::from_secs(120),
+            max_timeout: Duration::from_secs(1800),
+            idle_timeout: Duration::from_secs(120),
         };
 
         let args = provider.build_args("system prompt", "user prompt");
 
         assert!(args.contains(&"-p".to_string()));
         assert!(args.contains(&"--output-format".to_string()));
-        assert!(args.contains(&"json".to_string()));
+        assert!(args.contains(&"stream-json".to_string()));
         assert!(args.contains(&"--json-schema".to_string()));
         assert!(args.contains(&"--effort".to_string()));
         assert!(args.contains(&"high".to_string()));

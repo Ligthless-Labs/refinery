@@ -4,8 +4,9 @@ use std::time::Duration;
 
 use refinery_core::error::ProviderError;
 use refinery_core::types::{Message, ModelId, Role};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 /// Maximum response size in bytes (100KB).
 const MAX_RESPONSE_SIZE: usize = 100_000;
@@ -60,12 +61,14 @@ pub async fn resolve_binary(name: &str) -> Result<PathBuf, ProviderError> {
 /// - Uses absolute binary path (resolved via `resolve_binary`)
 /// - Clears environment, injects only specified vars + minimal PATH
 /// - Sets `kill_on_drop(true)` for cleanup
-/// - Applies timeout
+/// - Reads stdout line-by-line, resetting an **idle timeout** on each line
+/// - A hard **max timeout** caps total wall-clock time
 pub async fn spawn_cli(
     binary_path: &PathBuf,
     args: &[&str],
     env_vars: &[(&str, &str)],
-    timeout: Duration,
+    max_timeout: Duration,
+    idle_timeout: Duration,
     model: &ModelId,
 ) -> Result<String, ProviderError> {
     let mut cmd = Command::new(binary_path);
@@ -91,6 +94,10 @@ pub async fn spawn_cli(
         cmd.arg(arg);
     }
 
+    // Capture stdout as a pipe so we can read it incrementally
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
     // Security: kill child on drop
     cmd.kill_on_drop(true);
 
@@ -98,19 +105,84 @@ pub async fn spawn_cli(
         model = %model,
         binary = ?binary_path,
         args = ?args,
+        max_timeout = ?max_timeout,
+        idle_timeout = ?idle_timeout,
         "spawning CLI subprocess"
     );
 
-    let result = tokio::time::timeout(timeout, cmd.output()).await;
+    let mut child = cmd.spawn().map_err(|e| ProviderError::ProcessFailed {
+        model: model.clone(),
+        message: e.to_string(),
+        exit_code: None,
+    })?;
+
+    // Take stdout/stderr handles — these are Option, unwrap is safe because we set Stdio::piped()
+    let stdout_handle = child.stdout.take().expect("stdout piped");
+    let _stderr_handle = child.stderr.take().expect("stderr piped");
+
+    let model_clone = model.clone();
+
+    // Read stdout line-by-line with idle timeout, under a hard wall-clock cap
+    let streaming_read = async {
+        let mut reader = BufReader::new(stdout_handle);
+        let mut collected = String::new();
+        let mut line_buf = String::new();
+
+        loop {
+            line_buf.clear();
+            let read_result =
+                tokio::time::timeout(idle_timeout, reader.read_line(&mut line_buf)).await;
+
+            match read_result {
+                Ok(Ok(0)) => break, // EOF
+                Ok(Ok(_)) => {
+                    trace!(model = %model_clone, line = %line_buf.trim_end(), "stream event");
+                    collected.push_str(&line_buf);
+                    if collected.len() > MAX_RESPONSE_SIZE {
+                        return Err(ProviderError::ResponseTooLarge {
+                            model: model_clone.clone(),
+                            size: collected.len(),
+                            max: MAX_RESPONSE_SIZE,
+                        });
+                    }
+                }
+                Ok(Err(e)) => {
+                    return Err(ProviderError::ProcessFailed {
+                        model: model_clone.clone(),
+                        message: format!("stdout read error: {e}"),
+                        exit_code: None,
+                    });
+                }
+                Err(_) => {
+                    // Idle timeout — no output for idle_timeout duration
+                    return Err(ProviderError::IdleTimeout {
+                        model: model_clone.clone(),
+                        idle: idle_timeout,
+                    });
+                }
+            }
+        }
+
+        Ok(collected)
+    };
+
+    // Apply hard wall-clock timeout over the entire streaming read
+    let result = tokio::time::timeout(max_timeout, streaming_read).await;
 
     match result {
-        Ok(Ok(output)) => {
-            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        Ok(Ok(stdout)) => {
+            // Wait for process to finish and collect stderr
+            let output = child.wait_with_output().await.map_err(|e| {
+                ProviderError::ProcessFailed {
+                    model: model.clone(),
+                    message: e.to_string(),
+                    exit_code: None,
+                }
+            })?;
+
             let stderr = String::from_utf8_lossy(&output.stderr);
 
             if !output.status.success() {
-                // Some CLIs (e.g. claude) print errors to stdout rather than stderr.
-                // Prefer stderr; fall back to stdout so the error is never silently swallowed.
                 let message = if stderr.is_empty() {
                     stdout.as_str()
                 } else {
@@ -120,7 +192,7 @@ pub async fn spawn_cli(
                     model = %model,
                     exit_code = ?output.status.code(),
                     stderr = %stderr,
-                    stdout = %stdout,
+                    stdout_len = stdout.len(),
                     "CLI process failed"
                 );
                 return Err(ProviderError::ProcessFailed {
@@ -130,25 +202,12 @@ pub async fn spawn_cli(
                 });
             }
 
-            // Check response size
-            if stdout.len() > MAX_RESPONSE_SIZE {
-                return Err(ProviderError::ResponseTooLarge {
-                    model: model.clone(),
-                    size: stdout.len(),
-                    max: MAX_RESPONSE_SIZE,
-                });
-            }
-
             Ok(stdout)
         }
-        Ok(Err(e)) => Err(ProviderError::ProcessFailed {
-            model: model.clone(),
-            message: e.to_string(),
-            exit_code: None,
-        }),
+        Ok(Err(e)) => Err(e), // IdleTimeout or other streaming error
         Err(_) => Err(ProviderError::Timeout {
             model: model.clone(),
-            elapsed: timeout,
+            elapsed: max_timeout,
         }),
     }
 }
@@ -258,42 +317,64 @@ pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError>
     }
 }
 
-/// Extract the response from Claude's `--output-format json` + `--json-schema` output.
+/// Extract the response from Claude's `--output-format stream-json` + `--json-schema` output.
 ///
-/// The CLI emits a JSON stream (one object per line). The final event has
+/// The CLI emits JSONL (one JSON object per line). The final event has
 /// `"type":"result"` and carries `structured_output.answer` (the `result`
 /// field itself is empty when `--json-schema` is used).
-pub fn extract_claude_response(json_stream: &str) -> Result<String, ProviderError> {
+///
+/// Also accepts `--output-format json` (a JSON array) for backwards compatibility.
+pub fn extract_claude_response(output: &str) -> Result<String, ProviderError> {
     let model = ModelId::new("claude");
-    let preview: String = json_stream.chars().take(200).collect();
+    let preview: String = output.chars().take(200).collect();
 
-    let parsed: serde_json::Value =
-        serde_json::from_str(json_stream).map_err(|e| ProviderError::InvalidJson {
-            model: model.clone(),
-            message: format!("{e} (raw: {preview})"),
-        })?;
-
-    // Collect events: handle both JSON array and single object
-    let events: Vec<&serde_json::Value> = if let Some(arr) = parsed.as_array() {
-        arr.iter().collect()
-    } else {
-        vec![&parsed]
-    };
-
-    // Find the "type":"result" event and extract structured_output.answer
-    for event in events.iter().rev() {
-        if event.get("type").and_then(|t| t.as_str()) == Some("result") {
-            if let Some(answer) = event
-                .get("structured_output")
-                .and_then(|so| so.get("answer"))
-                .and_then(|a| a.as_str())
-            {
-                return Ok(answer.to_string());
+    // Try JSONL first (stream-json format): parse each line independently
+    for line in output.lines().rev() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if parsed.get("type").and_then(|t| t.as_str()) != Some("result") {
+            continue;
+        }
+        if let Some(answer) = parsed
+            .get("structured_output")
+            .and_then(|so| so.get("answer"))
+            .and_then(|a| a.as_str())
+        {
+            return Ok(answer.to_string());
+        }
+        // Fallback to result field if non-empty
+        if let Some(result) = parsed.get("result").and_then(|r| r.as_str()) {
+            if !result.is_empty() {
+                return Ok(result.to_string());
             }
-            // Fallback to result field if non-empty
-            if let Some(result) = event.get("result").and_then(|r| r.as_str()) {
-                if !result.is_empty() {
-                    return Ok(result.to_string());
+        }
+    }
+
+    // Fallback: try parsing as a JSON array (--output-format json)
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(output) {
+        let events: Vec<&serde_json::Value> = if let Some(arr) = parsed.as_array() {
+            arr.iter().collect()
+        } else {
+            vec![&parsed]
+        };
+        for event in events.iter().rev() {
+            if event.get("type").and_then(|t| t.as_str()) == Some("result") {
+                if let Some(answer) = event
+                    .get("structured_output")
+                    .and_then(|so| so.get("answer"))
+                    .and_then(|a| a.as_str())
+                {
+                    return Ok(answer.to_string());
+                }
+                if let Some(result) = event.get("result").and_then(|r| r.as_str()) {
+                    if !result.is_empty() {
+                        return Ok(result.to_string());
+                    }
                 }
             }
         }
@@ -302,7 +383,7 @@ pub fn extract_claude_response(json_stream: &str) -> Result<String, ProviderErro
     Err(ProviderError::InvalidJson {
         model,
         message: format!(
-            "no result event with structured_output found in JSON stream (raw: {preview})"
+            "no result event with structured_output found in stream (raw: {preview})"
         ),
     })
 }

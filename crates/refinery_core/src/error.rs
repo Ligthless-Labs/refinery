@@ -36,6 +36,9 @@ pub enum ProviderError {
     #[error("model {model} timed out after {elapsed:?}")]
     Timeout { model: ModelId, elapsed: Duration },
 
+    #[error("model {model} idle timed out after {idle:?} (no output)")]
+    IdleTimeout { model: ModelId, idle: Duration },
+
     #[error("model {model} returned invalid JSON: {message}")]
     InvalidJson { model: ModelId, message: String },
 
