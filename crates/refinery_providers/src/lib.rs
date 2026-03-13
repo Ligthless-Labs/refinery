@@ -1,5 +1,6 @@
 pub mod credential;
 pub mod process;
+pub mod tools;
 
 #[cfg(feature = "claude")]
 pub mod claude;

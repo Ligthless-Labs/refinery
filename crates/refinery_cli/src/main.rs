@@ -62,7 +62,8 @@ struct Cli {
     #[arg(long)]
     debug: bool,
 
-    /// Tools to allow models to use (e.g., WebFetch,Read). Passed to each provider's CLI.
+    /// Tools to allow: `web_fetch`, `web_search`, `file_read`, `file_write`, `shell`.
+    /// Mapped to each provider's native tool names automatically.
     #[arg(long = "allow-tools", value_delimiter = ',')]
     allow_tools: Vec<String>,
 
@@ -427,13 +428,12 @@ async fn build_provider(
     idle_timeout: Duration,
     progress: Option<refinery_core::ProgressFn>,
 ) -> Result<Arc<dyn ModelProvider>, Box<dyn std::error::Error>> {
-    let tools = allowed_tools.to_vec();
     match model {
         m if m.starts_with("claude") => {
             let model_name = m.strip_prefix("claude-").unwrap_or("opus-4-6");
             let provider = refinery_providers::claude::ClaudeProvider::new(
                 model_name,
-                tools,
+                allowed_tools,
                 max_timeout,
                 idle_timeout,
                 progress,
@@ -446,7 +446,7 @@ async fn build_provider(
             let provider = refinery_providers::codex::CodexProvider::new(
                 model_name,
                 "xhigh",
-                tools,
+                allowed_tools,
                 max_timeout,
                 idle_timeout,
                 progress,
@@ -462,7 +462,7 @@ async fn build_provider(
             };
             let provider = refinery_providers::gemini::GeminiProvider::new(
                 model_name,
-                tools,
+                allowed_tools,
                 max_timeout,
                 idle_timeout,
                 progress,

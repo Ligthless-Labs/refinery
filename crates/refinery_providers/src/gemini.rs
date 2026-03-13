@@ -8,7 +8,7 @@ use refinery_core::progress::ProgressFn;
 use refinery_core::types::{Message, ModelId};
 
 use crate::credential::{self, Credential};
-use crate::process;
+use crate::{process, tools};
 
 /// Gemini CLI provider adapter.
 ///
@@ -44,7 +44,7 @@ impl GeminiProvider {
     /// stored authentication (e.g. gcloud credentials).
     pub async fn new(
         model_name: &str,
-        allowed_tools: Vec<String>,
+        canonical_tools: &[String],
         max_timeout: Duration,
         idle_timeout: Duration,
         progress: Option<ProgressFn>,
@@ -53,6 +53,11 @@ impl GeminiProvider {
             credential::try_resolve_credential("gemini", &["GEMINI_API_KEY", "GOOGLE_API_KEY"]);
 
         let binary_path = process::resolve_binary("gemini").await?;
+
+        let (allowed_tools, unknown) = tools::resolve(canonical_tools, tools::gemini_tool);
+        for name in &unknown {
+            tracing::warn!(provider = "gemini", tool = %name, "unknown tool, skipping");
+        }
 
         Ok(Self {
             model_id: ModelId::new(model_name),

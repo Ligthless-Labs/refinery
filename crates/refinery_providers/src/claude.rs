@@ -8,7 +8,7 @@ use refinery_core::progress::ProgressFn;
 use refinery_core::types::{Message, ModelId};
 
 use crate::credential::{self, Credential};
-use crate::process;
+use crate::{process, tools};
 
 /// Claude CLI provider adapter.
 ///
@@ -47,7 +47,7 @@ impl ClaudeProvider {
     /// stored authentication (e.g. `~/.claude.json`).
     pub async fn new(
         model_name: &str,
-        allowed_tools: Vec<String>,
+        canonical_tools: &[String],
         max_timeout: Duration,
         idle_timeout: Duration,
         progress: Option<ProgressFn>,
@@ -58,6 +58,11 @@ impl ClaudeProvider {
         );
 
         let binary_path = process::resolve_binary("claude").await?;
+
+        let (allowed_tools, unknown) = tools::resolve(canonical_tools, tools::claude_tool);
+        for name in &unknown {
+            tracing::warn!(provider = "claude", tool = %name, "unknown tool, skipping");
+        }
 
         Ok(Self {
             model_id: ModelId::new(format!("claude-{model_name}")),

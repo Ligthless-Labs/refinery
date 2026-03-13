@@ -8,7 +8,7 @@ use refinery_core::progress::ProgressFn;
 use refinery_core::types::{Message, ModelId};
 
 use crate::credential::{self, Credential};
-use crate::process;
+use crate::{process, tools};
 
 /// Codex CLI provider adapter.
 ///
@@ -23,7 +23,6 @@ pub struct CodexProvider {
     credential: Option<Credential>,
     model_name: String,
     reasoning_effort: String,
-    #[allow(dead_code)] // Codex has no --allowed-tools equivalent; field kept for API consistency
     allowed_tools: Vec<String>,
     max_timeout: Duration,
     idle_timeout: Duration,
@@ -47,7 +46,7 @@ impl CodexProvider {
     pub async fn new(
         model_name: &str,
         reasoning_effort: &str,
-        allowed_tools: Vec<String>,
+        canonical_tools: &[String],
         max_timeout: Duration,
         idle_timeout: Duration,
         progress: Option<ProgressFn>,
@@ -56,6 +55,11 @@ impl CodexProvider {
             credential::try_resolve_credential("codex", &["OPENAI_API_KEY", "CODEX_API_KEY"]);
 
         let binary_path = process::resolve_binary("codex").await?;
+
+        let (allowed_tools, unknown) = tools::resolve(canonical_tools, tools::codex_tool);
+        for name in &unknown {
+            tracing::warn!(provider = "codex", tool = %name, "unknown tool, skipping");
+        }
 
         Ok(Self {
             model_id: ModelId::new(format!("codex-{model_name}")),
@@ -71,7 +75,7 @@ impl CodexProvider {
     }
 
     fn build_args(&self, system_prompt: &str, user_prompt: &str, schema_path: &str) -> Vec<String> {
-        vec![
+        let mut args = vec![
             "exec".to_string(),
             "--json".to_string(),
             "--sandbox".to_string(),
@@ -84,9 +88,15 @@ impl CodexProvider {
             format!("model_reasoning_effort={}", self.reasoning_effort),
             "--config".to_string(),
             format!("developer_instructions={system_prompt}"),
-            "--".to_string(),
-            user_prompt.to_string(),
-        ]
+        ];
+
+        if self.allowed_tools.iter().any(|t| t == "web_search") {
+            args.push("--enable-web-search".to_string());
+        }
+
+        args.push("--".to_string());
+        args.push(user_prompt.to_string());
+        args
     }
 }
 
