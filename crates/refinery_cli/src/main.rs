@@ -563,13 +563,16 @@ fn save_round_artifacts(
 
         // Proposals: one file per model
         for (model_id, text) in &round.proposals.proposals {
-            let path = round_dir.join(format!("propose-{model_id}.md"));
+            let safe_id = model_id.to_string().replace('/', "_");
+            let path = round_dir.join(format!("propose-{safe_id}.md"));
             std::fs::write(&path, text)?;
         }
 
         // Evaluations: one file per (evaluator, evaluatee) pair
         for ((evaluator, evaluatee), eval) in &round.evaluations.evaluations {
-            let path = round_dir.join(format!("evaluate-{evaluator}-{evaluatee}.json"));
+            let safe_evaluator = evaluator.to_string().replace('/', "_");
+            let safe_evaluatee = evaluatee.to_string().replace('/', "_");
+            let path = round_dir.join(format!("evaluate-{safe_evaluator}-{safe_evaluatee}.json"));
             let content = serde_json::json!({
                 "evaluator": evaluator.to_string(),
                 "evaluatee": evaluatee.to_string(),
