@@ -1,7 +1,8 @@
+use std::collections::HashMap;
 use std::io::{IsTerminal as _, Read as _};
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use clap::Parser;
@@ -244,13 +245,41 @@ async fn main() -> ExitCode {
     let timeout = Duration::from_secs(cli.timeout);
     let idle_timeout = Duration::from_secs(cli.idle_timeout);
 
-    // Progress display when stderr is a terminal and not in verbose/debug mode
-    let progress: Option<refinery_core::ProgressFn> =
-        if !cli.verbose && !cli.debug && std::io::stderr().is_terminal() {
-            Some(Arc::new(render_progress))
-        } else {
-            None
-        };
+    // Animated spinner: a background task ticks the frame at ~80ms, while
+    // progress events just update the shared status text.
+    let spinner_state = Arc::new(Mutex::new(SpinnerState {
+        label: None,
+        started: std::time::Instant::now(),
+        frame: 0,
+        current_evals: HashMap::new(),
+        round_scores: Vec::new(),
+    }));
+
+    let tick_handle = if !cli.verbose && !cli.debug && std::io::stderr().is_terminal() {
+        let state = spinner_state.clone();
+        Some(tokio::spawn(async move {
+            const FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+            loop {
+                tokio::time::sleep(Duration::from_millis(80)).await;
+                let mut s = state.lock().unwrap();
+                if let Some(ref label) = s.label {
+                    let spin = FRAMES[s.frame % FRAMES.len()];
+                    let elapsed = s.started.elapsed().as_secs();
+                    eprint!("\r\x1b[2K    {spin} {label}, {elapsed}s");
+                    s.frame += 1;
+                }
+            }
+        }))
+    } else {
+        None
+    };
+
+    let progress: Option<refinery_core::ProgressFn> = if tick_handle.is_some() {
+        let state = spinner_state.clone();
+        Some(Arc::new(move |event| render_progress(event, &state)))
+    } else {
+        None
+    };
 
     let mut providers: Vec<Arc<dyn ModelProvider>> = Vec::new();
 
@@ -271,8 +300,9 @@ async fn main() -> ExitCode {
 
     let run_result = engine.run(&prompt).await;
 
-    // Clear the in-place progress line before printing output
-    if progress.is_some() {
+    // Stop the spinner tick task and clear the progress line
+    if let Some(handle) = tick_handle {
+        handle.abort();
         eprint!("\r\x1b[2K");
     }
 
@@ -493,37 +523,64 @@ async fn build_provider(
     }
 }
 
-fn render_progress(event: refinery_core::ProgressEvent) {
+/// Shared state between the progress callback and the background spinner tick task.
+struct SpinnerState {
+    /// Current in-progress label, e.g. "claude-opus-4-6 — 42 lines".
+    /// The tick task appends the live elapsed time. None = spinner idle.
+    label: Option<String>,
+    /// When the current subprocess started (for live elapsed timer).
+    started: std::time::Instant,
+    /// Frame counter, advanced by the tick task.
+    frame: usize,
+    /// Per-model evaluation scores for the current round (cleared each round).
+    current_evals: HashMap<String, Vec<f64>>,
+    /// Per-round mean scores accumulated across all rounds.
+    round_scores: Vec<HashMap<String, f64>>,
+}
+
+/// Handle a progress event by updating shared spinner state.
+///
+/// `SubprocessOutput` sets the spinner message (the tick task renders it).
+/// All other events clear the spinner and print a final line.
+#[allow(clippy::too_many_lines)]
+fn render_progress(event: refinery_core::ProgressEvent, state: &Mutex<SpinnerState>) {
     use refinery_core::ProgressEvent;
-    const SPINNER: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    use std::fmt::Write;
+    let mut s = state.lock().unwrap();
     match event {
         ProgressEvent::RoundStarted { round, total } => {
+            s.label = None;
+            s.current_evals.clear();
+            eprint!("\r\x1b[2K");
             eprintln!("\n  Round {round}/{total}");
         }
         ProgressEvent::PhaseStarted { phase, .. } => {
+            s.label = None;
+            eprint!("\r\x1b[2K");
             eprintln!("  ── {phase} ──");
         }
         ProgressEvent::SubprocessOutput {
             model,
             lines,
-            elapsed,
+            ..
         } => {
-            let spin = SPINNER[lines % SPINNER.len()];
-            eprint!(
-                "\r\x1b[2K    {spin} {model} — {lines} lines, {}s",
-                elapsed.as_secs()
-            );
+            if s.label.is_none() {
+                s.started = std::time::Instant::now();
+            }
+            s.label = Some(format!("{model} — {lines} lines"));
         }
         ProgressEvent::ModelProposed {
             model,
             word_count,
             preview,
         } => {
+            s.label = None;
             eprintln!(
                 "\r\x1b[2K    \x1b[32m✓\x1b[0m {model} proposed ({word_count} words) — \"{preview}\""
             );
         }
         ProgressEvent::ModelProposeFailed { model, error } => {
+            s.label = None;
             eprintln!("\r\x1b[2K    \x1b[31m✗\x1b[0m {model} failed — {error}");
         }
         ProgressEvent::EvaluationCompleted {
@@ -532,6 +589,11 @@ fn render_progress(event: refinery_core::ProgressEvent) {
             score,
             preview,
         } => {
+            s.label = None;
+            s.current_evals
+                .entry(reviewee.to_string())
+                .or_default()
+                .push(score);
             eprintln!(
                 "\r\x1b[2K    \x1b[32m✓\x1b[0m {reviewer} → {reviewee}: {score:.1} — \"{preview}\""
             );
@@ -541,6 +603,7 @@ fn render_progress(event: refinery_core::ProgressEvent) {
             reviewee,
             error,
         } => {
+            s.label = None;
             eprintln!(
                 "\r\x1b[2K    \x1b[31m✗\x1b[0m {reviewer} → {reviewee} failed — {error}"
             );
@@ -554,8 +617,12 @@ fn render_progress(event: refinery_core::ProgressEvent) {
             required_stable,
             ..
         } => {
+            s.label = None;
+            eprint!("\r\x1b[2K");
+
+            let winner_name = winner.as_ref().map(std::string::ToString::to_string);
             if converged {
-                let w = winner.map_or_else(|| "?".to_string(), |m| m.to_string());
+                let w = winner_name.as_deref().unwrap_or("?");
                 eprintln!(
                     "  \x1b[32m→ Converged!\x1b[0m Winner: {w} ({best_score:.1} ≥ {threshold:.1}, stable {stable_rounds}/{required_stable})"
                 );
@@ -563,6 +630,62 @@ fn render_progress(event: refinery_core::ProgressEvent) {
                 eprintln!(
                     "  → Not converged ({best_score:.1}/{threshold:.1}, stable {stable_rounds}/{required_stable})"
                 );
+            }
+
+            // Finalize current round means into the history
+            if !s.current_evals.is_empty() {
+                let mut means: HashMap<String, f64> = HashMap::new();
+                for (model, scores) in &s.current_evals {
+                    #[allow(clippy::cast_precision_loss)]
+                    let mean = scores.iter().sum::<f64>() / scores.len() as f64;
+                    means.insert(model.clone(), mean);
+                }
+                s.round_scores.push(means);
+            }
+
+            // Render progressive score table across all rounds
+            if !s.round_scores.is_empty() {
+                // Collect all models, sorted by latest round score desc
+                let latest = s.round_scores.last().unwrap();
+                let mut models: Vec<&String> = latest.keys().collect();
+                models.sort_by(|a, b| {
+                    latest
+                        .get(*b)
+                        .partial_cmp(&latest.get(*a))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+
+                let name_w = models.iter().map(|n| n.len()).max().unwrap_or(0);
+                let num_rounds = s.round_scores.len();
+
+                // Header row with round numbers
+                let mut header = format!("    {:<name_w$}", "");
+                for r in 1..=num_rounds {
+                    let _ = write!(header, "  R{r:<3}");
+                }
+                eprintln!("\x1b[2m{header}\x1b[0m");
+
+                // One row per model
+                for name in &models {
+                    let is_winner = winner_name.as_deref() == Some(name.as_str());
+                    let mut row = if is_winner {
+                        format!("    \x1b[32m{name:<name_w$}")
+                    } else {
+                        format!("    {name:<name_w$}")
+                    };
+                    for round in &s.round_scores {
+                        match round.get(*name) {
+                            Some(score) => {
+                                let _ = write!(row, "  {score:>4.1}");
+                            }
+                            None => row.push_str("     -"),
+                        }
+                    }
+                    if is_winner {
+                        row.push_str(" ★\x1b[0m");
+                    }
+                    eprintln!("{row}");
+                }
             }
         }
     }
