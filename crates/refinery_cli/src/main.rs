@@ -236,91 +236,7 @@ async fn main() -> ExitCode {
     // Progress display when stderr is a terminal and not in verbose/debug mode
     let progress: Option<refinery_core::ProgressFn> =
         if !cli.verbose && !cli.debug && std::io::stderr().is_terminal() {
-            Some(Arc::new(|event: refinery_core::ProgressEvent| {
-                use refinery_core::ProgressEvent;
-                const SPINNER: &[char] =
-                    &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-                match event {
-                    ProgressEvent::RoundStarted { round, total } => {
-                        eprintln!("\n  Round {round}/{total}");
-                    }
-                    ProgressEvent::PhaseStarted { phase, .. } => {
-                        eprintln!("  ── {phase} ──");
-                    }
-                    ProgressEvent::SubprocessOutput {
-                        model,
-                        lines,
-                        elapsed,
-                    } => {
-                        let spin = SPINNER[lines % SPINNER.len()];
-                        eprint!(
-                            "\r\x1b[2K    {spin} {model} — {lines} lines, {}s",
-                            elapsed.as_secs()
-                        );
-                    }
-                    ProgressEvent::ModelProposed {
-                        model,
-                        word_count,
-                        preview,
-                    } => {
-                        eprintln!(
-                            "\r\x1b[2K    \x1b[32m✓\x1b[0m {model} proposed ({word_count} words) — \"{preview}\""
-                        );
-                    }
-                    ProgressEvent::ModelProposeFailed { model, error } => {
-                        eprintln!("\r\x1b[2K    \x1b[31m✗\x1b[0m {model} failed — {error}");
-                    }
-                    ProgressEvent::EvaluationCompleted {
-                        reviewer,
-                        reviewee,
-                        score,
-                        preview,
-                    } => {
-                        eprintln!(
-                            "\r\x1b[2K    \x1b[32m✓\x1b[0m {reviewer} → {reviewee}: {score:.1} — \"{preview}\""
-                        );
-                    }
-                    ProgressEvent::EvaluationFailed {
-                        reviewer,
-                        reviewee,
-                        error,
-                    } => {
-                        eprintln!(
-                            "\r\x1b[2K    \x1b[31m✗\x1b[0m {reviewer} → {reviewee} failed — {error}"
-                        );
-                    }
-                    ProgressEvent::ModelRefined { model, word_count } => {
-                        eprintln!(
-                            "\r\x1b[2K    \x1b[32m✓\x1b[0m {model} refined ({word_count} words)"
-                        );
-                    }
-                    ProgressEvent::ModelRefineFailed { model, error } => {
-                        eprintln!(
-                            "\r\x1b[2K    \x1b[31m✗\x1b[0m {model} refine failed — {error}"
-                        );
-                    }
-                    ProgressEvent::ConvergenceCheck {
-                        converged,
-                        winner,
-                        best_score,
-                        threshold,
-                        stable_rounds,
-                        required_stable,
-                        ..
-                    } => {
-                        if converged {
-                            let w = winner.map_or_else(|| "?".to_string(), |m| m.to_string());
-                            eprintln!(
-                                "  \x1b[32m→ Converged!\x1b[0m Winner: {w} ({best_score:.1} ≥ {threshold:.1}, stable {stable_rounds}/{required_stable})"
-                            );
-                        } else {
-                            eprintln!(
-                                "  → Not converged ({best_score:.1}/{threshold:.1}, stable {stable_rounds}/{required_stable})"
-                            );
-                        }
-                    }
-                }
-            }))
+            Some(Arc::new(render_progress))
         } else {
             None
         };
@@ -538,6 +454,87 @@ async fn build_provider(
             "Unknown model: {model}. Supported: claude[-model], codex, gemini[-model]"
         )
         .into()),
+    }
+}
+
+fn render_progress(event: refinery_core::ProgressEvent) {
+    use refinery_core::ProgressEvent;
+    const SPINNER: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    match event {
+        ProgressEvent::RoundStarted { round, total } => {
+            eprintln!("\n  Round {round}/{total}");
+        }
+        ProgressEvent::PhaseStarted { phase, .. } => {
+            eprintln!("  ── {phase} ──");
+        }
+        ProgressEvent::SubprocessOutput {
+            model,
+            lines,
+            elapsed,
+        } => {
+            let spin = SPINNER[lines % SPINNER.len()];
+            eprint!(
+                "\r\x1b[2K    {spin} {model} — {lines} lines, {}s",
+                elapsed.as_secs()
+            );
+        }
+        ProgressEvent::ModelProposed {
+            model,
+            word_count,
+            preview,
+        } => {
+            eprintln!(
+                "\r\x1b[2K    \x1b[32m✓\x1b[0m {model} proposed ({word_count} words) — \"{preview}\""
+            );
+        }
+        ProgressEvent::ModelProposeFailed { model, error } => {
+            eprintln!("\r\x1b[2K    \x1b[31m✗\x1b[0m {model} failed — {error}");
+        }
+        ProgressEvent::EvaluationCompleted {
+            reviewer,
+            reviewee,
+            score,
+            preview,
+        } => {
+            eprintln!(
+                "\r\x1b[2K    \x1b[32m✓\x1b[0m {reviewer} → {reviewee}: {score:.1} — \"{preview}\""
+            );
+        }
+        ProgressEvent::EvaluationFailed {
+            reviewer,
+            reviewee,
+            error,
+        } => {
+            eprintln!(
+                "\r\x1b[2K    \x1b[31m✗\x1b[0m {reviewer} → {reviewee} failed — {error}"
+            );
+        }
+        ProgressEvent::ModelRefined { model, word_count } => {
+            eprintln!("\r\x1b[2K    \x1b[32m✓\x1b[0m {model} refined ({word_count} words)");
+        }
+        ProgressEvent::ModelRefineFailed { model, error } => {
+            eprintln!("\r\x1b[2K    \x1b[31m✗\x1b[0m {model} refine failed — {error}");
+        }
+        ProgressEvent::ConvergenceCheck {
+            converged,
+            winner,
+            best_score,
+            threshold,
+            stable_rounds,
+            required_stable,
+            ..
+        } => {
+            if converged {
+                let w = winner.map_or_else(|| "?".to_string(), |m| m.to_string());
+                eprintln!(
+                    "  \x1b[32m→ Converged!\x1b[0m Winner: {w} ({best_score:.1} ≥ {threshold:.1}, stable {stable_rounds}/{required_stable})"
+                );
+            } else {
+                eprintln!(
+                    "  → Not converged ({best_score:.1}/{threshold:.1}, stable {stable_rounds}/{required_stable})"
+                );
+            }
+        }
     }
 }
 
