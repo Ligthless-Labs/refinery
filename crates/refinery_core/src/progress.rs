@@ -44,12 +44,6 @@ pub enum ProgressEvent {
         error: String,
     },
 
-    /// A model refined its answer.
-    ModelRefined { model: ModelId, word_count: usize },
-
-    /// A model failed to refine.
-    ModelRefineFailed { model: ModelId, error: String },
-
     /// Convergence check result after the close phase.
     ConvergenceCheck {
         round: u32,

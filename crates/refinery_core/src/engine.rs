@@ -174,7 +174,6 @@ impl Session<'_> {
                 .current_winner
                 .clone()
                 .expect("single model has winner");
-            let answer = self.last_answers.get(&winner).cloned().unwrap_or_default();
             return Ok(RoundOutcome {
                 round: 1,
                 proposals: crate::types::ProposalSet {
@@ -184,10 +183,6 @@ impl Session<'_> {
                 evaluations: crate::types::EvaluationSet {
                     evaluations: HashMap::new(),
                     dropped: vec![],
-                },
-                refinements: crate::types::RefinementSet {
-                    refinements: HashMap::from([(winner.clone(), answer)]),
-                    unrefined: vec![],
                 },
                 closing_decision: ClosingDecision::Converged {
                     winner,
@@ -332,27 +327,7 @@ impl Session<'_> {
                 .push((proposal.clone(), reviews));
         }
 
-        // Phase 3: REFINE
-        self.emit(ProgressEvent::PhaseStarted {
-            round,
-            phase: Phase::Refine,
-        });
-        let refinement_set = phases::refine::run(
-            &eval_providers,
-            &proposal_set.proposals,
-            &evaluation_set,
-            &self.prompt,
-            &round_ctx,
-            &semaphore,
-            self.config.timeout,
-            additional_context,
-            self.progress.clone(),
-        )
-        .await;
-
-        call_count += u32::try_from(refinement_set.refinements.len()).unwrap_or(0);
-
-        // Phase 4: CLOSE CHECK
+        // Phase 3: CLOSE CHECK
         let (closing_decision, new_winner, new_stable) = phases::close::run(
             self.strategy,
             &evaluation_set,
@@ -362,8 +337,8 @@ impl Session<'_> {
         )
         .await;
 
-        // Update state
-        self.last_answers.clone_from(&refinement_set.refinements);
+        // Update state — winning answer is the scored proposal
+        self.last_answers.clone_from(&proposal_set.proposals);
         self.last_mean_scores = phases::close::compute_mean_scores(&evaluation_set);
         self.current_winner.clone_from(&new_winner);
         self.stable_rounds = new_stable;
@@ -391,7 +366,6 @@ impl Session<'_> {
             round,
             proposals: proposal_set,
             evaluations: evaluation_set,
-            refinements: refinement_set,
             closing_decision: closing_decision.clone(),
             elapsed,
             call_count,
@@ -664,8 +638,8 @@ mod tests {
     fn estimate_returns_correct_counts() {
         let config = default_config(3);
         let estimate = Engine::estimate(&config);
-        assert_eq!(estimate.calls_per_round, 12); // 3² + 3
-        assert_eq!(estimate.total_calls, 60); // 12 * 5
+        assert_eq!(estimate.calls_per_round, 9); // 3²
+        assert_eq!(estimate.total_calls, 45); // 9 * 5
         assert_eq!(estimate.model_count, 3);
     }
 }

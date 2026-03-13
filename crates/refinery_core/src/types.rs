@@ -128,21 +128,12 @@ pub struct EvaluationSet {
     pub dropped: Vec<(ModelId, ModelId, ProviderError)>,
 }
 
-/// Output of the REFINE phase.
-#[derive(Debug, Clone)]
-pub struct RefinementSet {
-    pub refinements: HashMap<ModelId, String>,
-    /// Models that kept their previous answer due to refine failure.
-    pub unrefined: Vec<ModelId>,
-}
-
 /// The complete output of one round, returned by `Session::next_round()`.
 #[derive(Debug, Clone)]
 pub struct RoundOutcome {
     pub round: u32,
     pub proposals: ProposalSet,
     pub evaluations: EvaluationSet,
-    pub refinements: RefinementSet,
     pub closing_decision: ClosingDecision,
     pub elapsed: Duration,
     pub call_count: u32,
@@ -166,7 +157,6 @@ pub struct RoundData {
 pub enum Phase {
     Propose,
     Evaluate,
-    Refine,
     Close,
 }
 
@@ -175,7 +165,6 @@ impl std::fmt::Display for Phase {
         match self {
             Self::Propose => write!(f, "propose"),
             Self::Evaluate => write!(f, "evaluate"),
-            Self::Refine => write!(f, "refine"),
             Self::Close => write!(f, "close"),
         }
     }
@@ -276,8 +265,8 @@ impl EngineConfig {
         if n == 1 {
             return 1; // single-model short-circuit: 1 PROPOSE call, no loop
         }
-        // N (propose) + N*(N-1) (evaluate) + N (refine) = N² + N
-        n * n + n
+        // N (propose) + N*(N-1) (evaluate) = N²
+        n * n
     }
 }
 
@@ -380,21 +369,21 @@ mod tests {
         let models =
             |n: usize| -> Vec<ModelId> { (0..n).map(|i| ModelId::new(format!("m{i}"))).collect() };
 
-        // N=2: 2² + 2 = 6
+        // N=2: 2² = 4
         let config = EngineConfig::new(models(2), 5, 8.0, 2, Duration::from_secs(120), 10).unwrap();
-        assert_eq!(config.estimate_calls_per_round(), 6);
+        assert_eq!(config.estimate_calls_per_round(), 4);
 
-        // N=3: 3² + 3 = 12
+        // N=3: 3² = 9
         let config = EngineConfig::new(models(3), 5, 8.0, 2, Duration::from_secs(120), 10).unwrap();
-        assert_eq!(config.estimate_calls_per_round(), 12);
+        assert_eq!(config.estimate_calls_per_round(), 9);
 
-        // N=5: 5² + 5 = 30
+        // N=5: 5² = 25
         let config = EngineConfig::new(models(5), 5, 8.0, 2, Duration::from_secs(120), 10).unwrap();
-        assert_eq!(config.estimate_calls_per_round(), 30);
+        assert_eq!(config.estimate_calls_per_round(), 25);
 
-        // N=7: 7² + 7 = 56
+        // N=7: 7² = 49
         let config = EngineConfig::new(models(7), 5, 8.0, 2, Duration::from_secs(120), 10).unwrap();
-        assert_eq!(config.estimate_calls_per_round(), 56);
+        assert_eq!(config.estimate_calls_per_round(), 49);
     }
 
     #[test]
