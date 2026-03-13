@@ -246,46 +246,9 @@ pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError>
     }
 }
 
-/// Extract the response text from Claude's `--json-schema`-constrained output.
-///
-/// Claude is invoked with `--output-format text` and
-/// `--json-schema {"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"]}`,
-/// so the raw stdout is always `{"answer":"..."}`.
-pub fn extract_claude_response(json_text: &str) -> Result<String, ProviderError> {
-    let model = ModelId::new("claude");
-
-    let parsed: serde_json::Value =
-        serde_json::from_str(json_text).map_err(|e| ProviderError::InvalidJson {
-            model: model.clone(),
-            message: e.to_string(),
-        })?;
-
-    parsed
-        .get("answer")
-        .and_then(|r| r.as_str())
-        .map(String::from)
-        .ok_or_else(|| ProviderError::InvalidJson {
-            model,
-            message: "missing 'answer' field".to_string(),
-        })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn extract_claude_valid() {
-        let json = r#"{"answer":"Hello world"}"#;
-        let result = extract_claude_response(json).unwrap();
-        assert_eq!(result, "Hello world");
-    }
-
-    #[test]
-    fn extract_claude_missing_answer() {
-        let json = r#"{"something_else":"value"}"#;
-        assert!(extract_claude_response(json).is_err());
-    }
 
     #[test]
     fn extract_codex_valid() {
