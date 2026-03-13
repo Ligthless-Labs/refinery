@@ -179,6 +179,7 @@ pub fn extract_prompts(messages: &[Message]) -> (String, String) {
 /// the `text` field as JSON and extract `answer`.
 pub fn extract_codex_response(jsonl: &str) -> Result<String, ProviderError> {
     let model = ModelId::new("codex");
+    let preview: String = jsonl.chars().take(200).collect();
 
     for line in jsonl.lines().rev() {
         let line = line.trim();
@@ -203,7 +204,7 @@ pub fn extract_codex_response(jsonl: &str) -> Result<String, ProviderError> {
 
     Err(ProviderError::InvalidJson {
         model,
-        message: "no turn.completed event found in JSONL stream".to_string(),
+        message: format!("no turn.completed event found in JSONL stream (raw: {preview})"),
     })
 }
 
@@ -253,20 +254,20 @@ pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError>
 /// field itself is empty when `--json-schema` is used).
 pub fn extract_claude_response(json_stream: &str) -> Result<String, ProviderError> {
     let model = ModelId::new("claude");
+    let preview: String = json_stream.chars().take(200).collect();
 
-    // The output is a JSON array; parse it
     let parsed: serde_json::Value =
         serde_json::from_str(json_stream).map_err(|e| ProviderError::InvalidJson {
             model: model.clone(),
-            message: e.to_string(),
+            message: format!("{e} (raw: {preview})"),
         })?;
 
-    let events = parsed
-        .as_array()
-        .ok_or_else(|| ProviderError::InvalidJson {
-            model: model.clone(),
-            message: "expected JSON array".to_string(),
-        })?;
+    // Collect events: handle both JSON array and single object
+    let events: Vec<&serde_json::Value> = if let Some(arr) = parsed.as_array() {
+        arr.iter().collect()
+    } else {
+        vec![&parsed]
+    };
 
     // Find the "type":"result" event and extract structured_output.answer
     for event in events.iter().rev() {
@@ -289,7 +290,9 @@ pub fn extract_claude_response(json_stream: &str) -> Result<String, ProviderErro
 
     Err(ProviderError::InvalidJson {
         model,
-        message: "no result event with structured_output found in JSON stream".to_string(),
+        message: format!(
+            "no result event with structured_output found in JSON stream (raw: {preview})"
+        ),
     })
 }
 
