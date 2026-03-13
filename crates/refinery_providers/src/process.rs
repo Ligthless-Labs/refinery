@@ -1,3 +1,4 @@
+use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -8,6 +9,24 @@ use tracing::{debug, warn};
 
 /// Maximum response size in bytes (100KB).
 const MAX_RESPONSE_SIZE: usize = 100_000;
+
+/// Return a sanitized PATH for child processes.
+///
+/// - Uses `var_os` to preserve non-UTF-8 entries.
+/// - Falls back to a minimal default when the parent PATH is missing or empty.
+/// - Strips empty and `"."` segments to reduce PATH-hijack risk.
+fn sanitized_path() -> OsString {
+    let default = std::env::join_paths(["/usr/bin", "/usr/local/bin", "/bin"])
+        .unwrap_or_default();
+    let base = std::env::var_os("PATH")
+        .filter(|v| !v.is_empty())
+        .unwrap_or(default.clone());
+    std::env::join_paths(
+        std::env::split_paths(&base)
+            .filter(|p| !p.as_os_str().is_empty() && p.as_os_str() != OsStr::new(".")),
+    )
+    .unwrap_or(base)
+}
 
 /// Resolve a CLI binary to its absolute path via `which`.
 ///
@@ -55,9 +74,8 @@ pub async fn spawn_cli(
     // Security: clear all inherited environment
     cmd.env_clear();
 
-    // Inherit PATH so CLI tools can resolve their own dependencies (e.g. node for gemini)
-    let path = std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/usr/local/bin:/bin".to_string());
-    cmd.env("PATH", path);
+    // Inherit a sanitized PATH so CLI tools can find their own dependencies (e.g. node for gemini)
+    cmd.env("PATH", sanitized_path());
 
     // Inherit TMPDIR — required by many CLIs on macOS for temp file creation
     if let Ok(tmpdir) = std::env::var("TMPDIR") {
