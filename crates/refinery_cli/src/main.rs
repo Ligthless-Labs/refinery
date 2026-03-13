@@ -14,7 +14,7 @@ use refinery_core::{EngineConfig, ModelProvider};
 /// Iterative multi-model consensus engine.
 ///
 /// Given a prompt, N models independently produce answers, cross-review each other's work,
-/// score all answers, then refine — repeating until a configurable convergence criterion is met.
+/// score all answers — repeating until a configurable convergence criterion is met.
 #[derive(Parser, Debug)]
 #[command(name = "refinery", version, about)]
 struct Cli {
@@ -287,16 +287,6 @@ async fn main() -> ExitCode {
                     } => {
                         eprintln!(
                             "\r\x1b[2K    \x1b[31m✗\x1b[0m {reviewer} → {reviewee} failed — {error}"
-                        );
-                    }
-                    ProgressEvent::ModelRefined { model, word_count } => {
-                        eprintln!(
-                            "\r\x1b[2K    \x1b[32m✓\x1b[0m {model} refined ({word_count} words)"
-                        );
-                    }
-                    ProgressEvent::ModelRefineFailed { model, error } => {
-                        eprintln!(
-                            "\r\x1b[2K    \x1b[31m✗\x1b[0m {model} refine failed — {error}"
                         );
                     }
                     ProgressEvent::ConvergenceCheck {
