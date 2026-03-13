@@ -7,7 +7,7 @@ use refinery_core::error::ProviderError;
 use refinery_core::types::{Message, ModelId};
 
 use crate::credential::{self, Credential};
-use crate::process;
+use crate::process::{self, ProgressFn};
 
 /// Gemini CLI provider adapter.
 ///
@@ -16,7 +16,6 @@ use crate::process;
 ///
 /// Supports: `GEMINI_API_KEY` (Google AI Studio) or `GOOGLE_API_KEY` (Vertex AI express mode).
 /// When neither is set, falls back to the Gemini CLI's own stored credentials (gcloud auth).
-#[derive(Debug)]
 pub struct GeminiProvider {
     model_id: ModelId,
     binary_path: PathBuf,
@@ -24,6 +23,16 @@ pub struct GeminiProvider {
     model_name: String,
     max_timeout: Duration,
     idle_timeout: Duration,
+    progress: Option<ProgressFn>,
+}
+
+impl std::fmt::Debug for GeminiProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GeminiProvider")
+            .field("model_id", &self.model_id)
+            .field("model_name", &self.model_name)
+            .finish_non_exhaustive()
+    }
 }
 
 impl GeminiProvider {
@@ -35,6 +44,7 @@ impl GeminiProvider {
         model_name: &str,
         max_timeout: Duration,
         idle_timeout: Duration,
+        progress: Option<ProgressFn>,
     ) -> Result<Self, ProviderError> {
         let credential =
             credential::try_resolve_credential("gemini", &["GEMINI_API_KEY", "GOOGLE_API_KEY"]);
@@ -48,6 +58,7 @@ impl GeminiProvider {
             model_name: model_name.to_string(),
             max_timeout,
             idle_timeout,
+            progress,
         })
     }
 
@@ -104,6 +115,7 @@ impl ModelProvider for GeminiProvider {
             self.max_timeout,
             self.idle_timeout,
             &self.model_id,
+            self.progress.clone(),
         )
         .await;
 
@@ -141,6 +153,7 @@ mod tests {
             model_name: "gemini-3.1-pro-preview".to_string(),
             max_timeout: Duration::from_secs(1800),
             idle_timeout: Duration::from_secs(120),
+            progress: None,
         };
 
         let args = provider.build_args("user prompt");

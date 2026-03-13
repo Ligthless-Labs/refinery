@@ -1,4 +1,4 @@
-use std::io::Read as _;
+use std::io::{IsTerminal as _, Read as _};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -232,10 +232,29 @@ async fn main() -> ExitCode {
     // Build providers
     let timeout = Duration::from_secs(cli.timeout);
     let idle_timeout = Duration::from_secs(cli.idle_timeout);
+
+    // In-place progress display when stderr is a terminal and not in verbose/debug mode
+    let progress: Option<refinery_providers::process::ProgressFn> =
+        if !cli.verbose && !cli.debug && std::io::stderr().is_terminal() {
+            Some(Arc::new(
+                |model: &refinery_core::types::ModelId, lines: usize, elapsed: Duration| {
+                    const SPINNER: &[char] =
+                        &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+                    let spin = SPINNER[lines % SPINNER.len()];
+                    eprint!(
+                        "\r\x1b[2K  {spin} {model} — {lines} lines, {}s",
+                        elapsed.as_secs()
+                    );
+                },
+            ))
+        } else {
+            None
+        };
+
     let mut providers: Vec<Arc<dyn ModelProvider>> = Vec::new();
 
     for model in &cli.models {
-        match build_provider(model, timeout, idle_timeout).await {
+        match build_provider(model, timeout, idle_timeout, progress.clone()).await {
             Ok(p) => providers.push(p),
             Err(e) => {
                 eprintln!("Failed to initialize provider '{model}': {e}");
@@ -249,7 +268,14 @@ async fn main() -> ExitCode {
 
     info!("Starting consensus run with {} models", cli.models.len());
 
-    match engine.run(&prompt).await {
+    let run_result = engine.run(&prompt).await;
+
+    // Clear the in-place progress line before printing output
+    if progress.is_some() {
+        eprint!("\r\x1b[2K");
+    }
+
+    match run_result {
         Ok(outcome) => {
             match cli.output_format {
                 OutputFormat::Json => {
@@ -393,6 +419,7 @@ async fn build_provider(
     model: &str,
     max_timeout: Duration,
     idle_timeout: Duration,
+    progress: Option<refinery_providers::process::ProgressFn>,
 ) -> Result<Arc<dyn ModelProvider>, Box<dyn std::error::Error>> {
     match model {
         m if m.starts_with("claude") => {
@@ -401,6 +428,7 @@ async fn build_provider(
                 model_name,
                 max_timeout,
                 idle_timeout,
+                progress,
             )
             .await?;
             Ok(Arc::new(provider))
@@ -412,6 +440,7 @@ async fn build_provider(
                 "xhigh",
                 max_timeout,
                 idle_timeout,
+                progress,
             )
             .await?;
             Ok(Arc::new(provider))
@@ -426,6 +455,7 @@ async fn build_provider(
                 model_name,
                 max_timeout,
                 idle_timeout,
+                progress,
             )
             .await?;
             Ok(Arc::new(provider))

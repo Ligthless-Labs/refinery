@@ -1,6 +1,7 @@
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use refinery_core::error::ProviderError;
 use refinery_core::types::{Message, ModelId, Role};
@@ -10,6 +11,11 @@ use tracing::{debug, trace, warn};
 
 /// Maximum response size in bytes (100KB).
 const MAX_RESPONSE_SIZE: usize = 100_000;
+
+/// Progress callback invoked per line of subprocess output.
+///
+/// Arguments: `(model_id, lines_read, elapsed_since_spawn)`.
+pub type ProgressFn = Arc<dyn Fn(&ModelId, usize, Duration) + Send + Sync>;
 
 /// Return a sanitized PATH for child processes.
 ///
@@ -70,6 +76,7 @@ pub async fn spawn_cli(
     max_timeout: Duration,
     idle_timeout: Duration,
     model: &ModelId,
+    progress: Option<ProgressFn>,
 ) -> Result<String, ProviderError> {
     let mut cmd = Command::new(binary_path);
 
@@ -127,6 +134,8 @@ pub async fn spawn_cli(
         let mut reader = BufReader::new(stdout_handle);
         let mut collected = String::new();
         let mut line_buf = String::new();
+        let mut line_count: usize = 0;
+        let start = Instant::now();
 
         loop {
             line_buf.clear();
@@ -136,7 +145,11 @@ pub async fn spawn_cli(
             match read_result {
                 Ok(Ok(0)) => break, // EOF
                 Ok(Ok(_)) => {
+                    line_count += 1;
                     trace!(model = %model_clone, line = %line_buf.trim_end(), "stream event");
+                    if let Some(ref cb) = progress {
+                        cb(&model_clone, line_count, start.elapsed());
+                    }
                     collected.push_str(&line_buf);
                     if collected.len() > MAX_RESPONSE_SIZE {
                         return Err(ProviderError::ResponseTooLarge {
