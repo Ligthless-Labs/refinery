@@ -42,7 +42,7 @@ impl GeminiProvider {
     /// Credentials are optional: if no env var is set the Gemini CLI will use its own
     /// stored authentication (e.g. gcloud credentials).
     pub async fn new(
-        model_name: &str,
+        model_id: ModelId,
         max_timeout: Duration,
         idle_timeout: Duration,
         progress: Option<ProgressFn>,
@@ -51,12 +51,13 @@ impl GeminiProvider {
             credential::try_resolve_credential("gemini", &["GEMINI_API_KEY", "GOOGLE_API_KEY"]);
 
         let binary_path = process::resolve_binary("gemini").await?;
+        let model_name = model_id.model().to_string();
 
         Ok(Self {
-            model_id: ModelId::new(model_name),
+            model_id,
             binary_path,
             credential,
-            model_name: model_name.to_string(),
+            model_name,
             max_timeout,
             idle_timeout,
             progress,
@@ -148,7 +149,7 @@ mod tests {
     #[test]
     fn build_args_contains_required_flags() {
         let provider = GeminiProvider {
-            model_id: ModelId::new("gemini-3.1-pro-preview"),
+            model_id: ModelId::from_parts("gemini-cli", "gemini-3.1-pro-preview"),
             binary_path: PathBuf::from("/usr/local/bin/gemini"),
             credential: Some(test_credential()),
             model_name: "gemini-3.1-pro-preview".to_string(),
