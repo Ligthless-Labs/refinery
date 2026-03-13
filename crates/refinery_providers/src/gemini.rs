@@ -71,8 +71,8 @@ impl ModelProvider for GeminiProvider {
         let args_refs: Vec<&str> = args.iter().map(String::as_str).collect();
 
         // GEMINI_SYSTEM_MD expects a file path, not inline content — write to temp file.
-        let tmp_path = std::env::temp_dir()
-            .join(format!("refinery-gemini-{}.md", std::process::id()));
+        let tmp_path =
+            std::env::temp_dir().join(format!("refinery-gemini-{}.md", std::process::id()));
         std::fs::write(&tmp_path, system_prompt.as_bytes()).map_err(|e| {
             ProviderError::ProcessFailed {
                 model: self.model_id.clone(),

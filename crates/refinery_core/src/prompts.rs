@@ -442,8 +442,14 @@ mod tests {
         let inner_start = wrapped.find('>').map_or(0, |i| i + 1);
         let inner_end = wrapped.rfind("\n</file-").unwrap_or(wrapped.len());
         let inner = &wrapped[inner_start..inner_end];
-        assert!(!inner.contains("</file-abc123>"), "closing tag leaked: {inner}");
-        assert!(!inner.contains("<file-abc123"), "opening tag leaked: {inner}");
+        assert!(
+            !inner.contains("</file-abc123>"),
+            "closing tag leaked: {inner}"
+        );
+        assert!(
+            !inner.contains("<file-abc123"),
+            "opening tag leaked: {inner}"
+        );
         assert!(inner.contains("&lt;/file-"));
         assert!(inner.contains("&lt;file-"));
     }
@@ -473,5 +479,4 @@ mod tests {
         let result = assemble_file_prompt(Some("just a question"), &[], "abc123");
         assert_eq!(result, "just a question");
     }
-
 }

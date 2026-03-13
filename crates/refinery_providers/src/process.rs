@@ -16,8 +16,7 @@ const MAX_RESPONSE_SIZE: usize = 100_000;
 /// - Falls back to a minimal default when the parent PATH is missing or empty.
 /// - Strips empty and `"."` segments to reduce PATH-hijack risk.
 fn sanitized_path() -> OsString {
-    let default = std::env::join_paths(["/usr/bin", "/usr/local/bin", "/bin"])
-        .unwrap_or_default();
+    let default = std::env::join_paths(["/usr/bin", "/usr/local/bin", "/bin"]).unwrap_or_default();
     let base = std::env::var_os("PATH")
         .filter(|v| !v.is_empty())
         .unwrap_or(default.clone());
@@ -112,7 +111,11 @@ pub async fn spawn_cli(
             if !output.status.success() {
                 // Some CLIs (e.g. claude) print errors to stdout rather than stderr.
                 // Prefer stderr; fall back to stdout so the error is never silently swallowed.
-                let message = if stderr.is_empty() { stdout.as_str() } else { stderr.as_ref() };
+                let message = if stderr.is_empty() {
+                    stdout.as_str()
+                } else {
+                    stderr.as_ref()
+                };
                 warn!(
                     model = %model,
                     exit_code = ?output.status.code(),

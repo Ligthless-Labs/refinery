@@ -183,11 +183,8 @@ async fn main() -> ExitCode {
 
     // Assemble the final prompt
     let nonce = refinery_core::prompts::generate_nonce();
-    let prompt = refinery_core::prompts::assemble_file_prompt(
-        prompt_text.as_deref(),
-        &file_data,
-        &nonce,
-    );
+    let prompt =
+        refinery_core::prompts::assemble_file_prompt(prompt_text.as_deref(), &file_data, &nonce);
 
     if cli.models.is_empty() {
         eprintln!("Error: at least one model must be specified with --models");
@@ -387,7 +384,6 @@ fn read_and_validate_files(
     Ok(files)
 }
 
-
 async fn build_provider(
     model: &str,
     timeout: Duration,
@@ -406,7 +402,11 @@ async fn build_provider(
             Ok(Arc::new(provider))
         }
         m if m.starts_with("gemini") => {
-            let model_name = if m == "gemini" { "gemini-3.1-pro-preview" } else { m };
+            let model_name = if m == "gemini" {
+                "gemini-3.1-pro-preview"
+            } else {
+                m
+            };
             let provider =
                 refinery_providers::gemini::GeminiProvider::new(model_name, timeout).await?;
             Ok(Arc::new(provider))

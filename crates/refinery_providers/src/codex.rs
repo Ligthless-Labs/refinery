@@ -31,7 +31,11 @@ impl CodexProvider {
     ///
     /// Credentials are optional: if no env var is set the Codex CLI will use its own
     /// stored authentication.
-    pub async fn new(model_name: &str, reasoning_effort: &str, timeout: Duration) -> Result<Self, ProviderError> {
+    pub async fn new(
+        model_name: &str,
+        reasoning_effort: &str,
+        timeout: Duration,
+    ) -> Result<Self, ProviderError> {
         let credential =
             credential::try_resolve_credential("codex", &["OPENAI_API_KEY", "CODEX_API_KEY"]);
 
