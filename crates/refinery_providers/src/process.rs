@@ -9,8 +9,8 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tracing::{debug, warn};
 
-/// Maximum response size in bytes (100KB).
-const MAX_RESPONSE_SIZE: usize = 100_000;
+/// Maximum response size in bytes (1MB).
+const MAX_RESPONSE_SIZE: usize = 1_000_000;
 
 /// Return a sanitized PATH for child processes.
 ///
@@ -121,7 +121,21 @@ pub async fn spawn_cli(
 
     // Take stdout/stderr handles — these are Option, unwrap is safe because we set Stdio::piped()
     let stdout_handle = child.stdout.take().expect("stdout piped");
-    let _stderr_handle = child.stderr.take().expect("stderr piped");
+    let stderr_handle = child.stderr.take().expect("stderr piped");
+
+    // Drain stderr concurrently to prevent pipe-buffer deadlock.
+    // If a subprocess writes >64KB to stderr while we block on stdout,
+    // the OS pipe buffer fills and the subprocess blocks, stalling stdout too.
+    let stderr_task = tokio::spawn(async move {
+        let mut reader = BufReader::new(stderr_handle);
+        let mut buf = String::new();
+        while let Ok(n) = reader.read_line(&mut buf).await {
+            if n == 0 {
+                break;
+            }
+        }
+        buf
+    });
 
     let model_clone = model.clone();
 
@@ -184,26 +198,24 @@ pub async fn spawn_cli(
 
     match result {
         Ok(Ok(stdout)) => {
-            // Wait for process to finish and collect stderr
-            let output = child.wait_with_output().await.map_err(|e| {
-                ProviderError::ProcessFailed {
-                    model: model.clone(),
-                    message: e.to_string(),
-                    exit_code: None,
-                }
+            // Wait for process exit and collect stderr from the drain task
+            let status = child.wait().await.map_err(|e| ProviderError::ProcessFailed {
+                model: model.clone(),
+                message: e.to_string(),
+                exit_code: None,
             })?;
 
-            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stderr = stderr_task.await.unwrap_or_default();
 
-            if !output.status.success() {
+            if !status.success() {
                 let message = if stderr.is_empty() {
                     stdout.as_str()
                 } else {
-                    stderr.as_ref()
+                    stderr.as_str()
                 };
                 warn!(
                     model = %model,
-                    exit_code = ?output.status.code(),
+                    exit_code = ?status.code(),
                     stderr = %stderr,
                     stdout_len = stdout.len(),
                     "CLI process failed"
@@ -211,7 +223,7 @@ pub async fn spawn_cli(
                 return Err(ProviderError::ProcessFailed {
                     model: model.clone(),
                     message: message.to_string(),
-                    exit_code: output.status.code(),
+                    exit_code: status.code(),
                 });
             }
 
@@ -330,6 +342,27 @@ pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError>
     }
 }
 
+/// Try to extract the answer from a single Claude result event.
+///
+/// Checks `structured_output.answer` first, then falls back to `result`.
+fn extract_from_result_event(event: &serde_json::Value) -> Option<String> {
+    if event.get("type").and_then(|t| t.as_str()) != Some("result") {
+        return None;
+    }
+    if let Some(answer) = event
+        .get("structured_output")
+        .and_then(|so| so.get("answer"))
+        .and_then(|a| a.as_str())
+    {
+        return Some(answer.to_string());
+    }
+    event
+        .get("result")
+        .and_then(|r| r.as_str())
+        .filter(|r| !r.is_empty())
+        .map(String::from)
+}
+
 /// Extract the response from Claude's `--output-format stream-json` + `--json-schema` output.
 ///
 /// The CLI emits JSONL (one JSON object per line). The final event has
@@ -350,21 +383,8 @@ pub fn extract_claude_response(output: &str) -> Result<String, ProviderError> {
         let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
         };
-        if parsed.get("type").and_then(|t| t.as_str()) != Some("result") {
-            continue;
-        }
-        if let Some(answer) = parsed
-            .get("structured_output")
-            .and_then(|so| so.get("answer"))
-            .and_then(|a| a.as_str())
-        {
-            return Ok(answer.to_string());
-        }
-        // Fallback to result field if non-empty
-        if let Some(result) = parsed.get("result").and_then(|r| r.as_str()) {
-            if !result.is_empty() {
-                return Ok(result.to_string());
-            }
+        if let Some(answer) = extract_from_result_event(&parsed) {
+            return Ok(answer);
         }
     }
 
@@ -376,19 +396,8 @@ pub fn extract_claude_response(output: &str) -> Result<String, ProviderError> {
             vec![&parsed]
         };
         for event in events.iter().rev() {
-            if event.get("type").and_then(|t| t.as_str()) == Some("result") {
-                if let Some(answer) = event
-                    .get("structured_output")
-                    .and_then(|so| so.get("answer"))
-                    .and_then(|a| a.as_str())
-                {
-                    return Ok(answer.to_string());
-                }
-                if let Some(result) = event.get("result").and_then(|r| r.as_str()) {
-                    if !result.is_empty() {
-                        return Ok(result.to_string());
-                    }
-                }
+            if let Some(answer) = extract_from_result_event(event) {
+                return Ok(answer);
             }
         }
     }
