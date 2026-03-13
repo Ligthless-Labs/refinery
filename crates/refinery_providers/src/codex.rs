@@ -79,8 +79,7 @@ impl ModelProvider for CodexProvider {
         // --output-schema expects a file path — write schema to temp file.
         let schema_path =
             std::env::temp_dir().join(format!("refinery-codex-schema-{}.json", std::process::id()));
-        let schema =
-            r#"{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"]}"#;
+        let schema = r#"{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}"#;
         std::fs::write(&schema_path, schema).map_err(|e| ProviderError::ProcessFailed {
             model: self.model_id.clone(),
             message: format!("failed to write schema temp file: {e}"),
