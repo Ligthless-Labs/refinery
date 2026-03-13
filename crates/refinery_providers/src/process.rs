@@ -64,6 +64,7 @@ pub async fn resolve_binary(name: &str) -> Result<PathBuf, ProviderError> {
 /// - Sets `kill_on_drop(true)` for cleanup
 /// - Reads stdout line-by-line, resetting an **idle timeout** on each line
 /// - A hard **max timeout** caps total wall-clock time
+#[allow(clippy::too_many_lines)]
 pub async fn spawn_cli(
     binary_path: &PathBuf,
     args: &[&str],

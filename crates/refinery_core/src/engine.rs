@@ -339,7 +339,7 @@ impl Session<'_> {
         // Update state
         self.last_answers.clone_from(&refinement_set.refinements);
         self.last_mean_scores = phases::close::compute_mean_scores(&evaluation_set);
-        self.current_winner = new_winner.clone();
+        self.current_winner.clone_from(&new_winner);
         self.stable_rounds = new_stable;
 
         // Emit convergence check

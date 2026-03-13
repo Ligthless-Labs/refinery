@@ -12,7 +12,7 @@ use crate::prompts;
 use crate::types::{EvaluationSet, Message, ModelId, RefinementSet};
 
 /// Execute the REFINE phase: each model improves its answer based on reviews.
-#[allow(clippy::too_many_arguments, clippy::implicit_hasher)]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines, clippy::implicit_hasher)]
 pub async fn run(
     providers: &[Arc<dyn ModelProvider>],
     proposals: &HashMap<ModelId, String>,
