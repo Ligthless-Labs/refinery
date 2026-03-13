@@ -71,6 +71,7 @@ impl ClaudeProvider {
     fn build_args(&self, system_prompt: &str, user_prompt: &str) -> Vec<String> {
         vec![
             "-p".to_string(),
+            "--verbose".to_string(), // required for stream-json in print mode
             "--output-format".to_string(),
             "stream-json".to_string(),
             "--json-schema".to_string(),
@@ -155,6 +156,7 @@ mod tests {
         let args = provider.build_args("system prompt", "user prompt");
 
         assert!(args.contains(&"-p".to_string()));
+        assert!(args.contains(&"--verbose".to_string()));
         assert!(args.contains(&"--output-format".to_string()));
         assert!(args.contains(&"stream-json".to_string()));
         assert!(args.contains(&"--json-schema".to_string()));
