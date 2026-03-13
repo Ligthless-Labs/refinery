@@ -1,4 +1,5 @@
 use std::io::Read as _;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,8 +18,13 @@ use converge_core::{EngineConfig, ModelProvider};
 #[derive(Parser, Debug)]
 #[command(name = "converge", version, about)]
 struct Cli {
-    /// The prompt to reach consensus on (or - for stdin, max 1MB)
-    prompt: String,
+    /// The prompt to reach consensus on (or - for stdin, max 1MB). Optional when --file is used.
+    #[arg(value_name = "PROMPT")]
+    prompt: Option<String>,
+
+    /// File(s) to include in the prompt, tagged by filename (repeatable, 1MB total)
+    #[arg(long = "file", short = 'f', value_name = "PATH")]
+    files: Vec<PathBuf>,
 
     /// Comma-separated model list [e.g., claude,codex,gemini]
     #[arg(short, long, value_delimiter = ',')]
@@ -131,24 +137,57 @@ async fn main() -> ExitCode {
         .with_writer(std::io::stderr)
         .init();
 
-    // Read prompt from stdin if "-"
-    let prompt = if cli.prompt == "-" {
-        let mut buf = String::new();
-        let bytes_read = match std::io::stdin().take(1_000_001).read_to_string(&mut buf) {
-            Ok(n) => n,
-            Err(e) => {
-                eprintln!("Error reading stdin: {e}");
+    // Resolve prompt text from positional arg or stdin
+    let prompt_text: Option<String> = match cli.prompt.as_deref() {
+        Some("-") => {
+            let mut buf = String::new();
+            let bytes_read = match std::io::stdin().take(1_000_001).read_to_string(&mut buf) {
+                Ok(n) => n,
+                Err(e) => {
+                    eprintln!("Error reading stdin: {e}");
+                    return ExitCode::from(4);
+                }
+            };
+            if bytes_read > 1_000_000 {
+                eprintln!("Error: stdin input exceeds 1MB limit");
                 return ExitCode::from(4);
             }
-        };
-        if bytes_read > 1_000_000 {
-            eprintln!("Error: stdin input exceeds 1MB limit");
-            return ExitCode::from(4);
+            Some(buf)
         }
-        buf
-    } else {
-        cli.prompt
+        Some(p) => Some(p.to_string()),
+        None => None,
     };
+
+    // At least one input source required
+    if prompt_text.is_none() && cli.files.is_empty() {
+        eprintln!("Error: a prompt or at least one --file must be provided");
+        return ExitCode::from(4);
+    }
+
+    // Read and validate files (runs even during --dry-run for early validation)
+    let prompt_bytes = prompt_text.as_deref().map_or(0, str::len);
+    let file_budget = 1_000_000_usize.saturating_sub(prompt_bytes);
+    let file_data: Vec<(String, String)> = if !cli.files.is_empty() {
+        match read_and_validate_files(&cli.files, file_budget) {
+            Ok(data) => data,
+            Err(errors) => {
+                for e in &errors {
+                    eprintln!("Error: {e}");
+                }
+                return ExitCode::from(4);
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
+    // Assemble the final prompt
+    let nonce = converge_core::prompts::generate_nonce();
+    let prompt = converge_core::prompts::assemble_file_prompt(
+        prompt_text.as_deref(),
+        &file_data,
+        &nonce,
+    );
 
     if cli.models.is_empty() {
         eprintln!("Error: at least one model must be specified with --models");
@@ -287,23 +326,90 @@ async fn main() -> ExitCode {
     }
 }
 
+fn read_and_validate_files(
+    paths: &[PathBuf],
+    budget: usize,
+) -> Result<Vec<(String, String)>, Vec<String>> {
+    let mut errors: Vec<String> = Vec::new();
+    let mut files: Vec<(String, String)> = Vec::new();
+    let mut total_bytes: usize = 0;
+
+    for path in paths {
+        let path_str = path.display().to_string();
+
+        let meta = match std::fs::metadata(path) {
+            Ok(m) => m,
+            Err(e) => {
+                errors.push(format!("file '{path_str}': {e}"));
+                continue;
+            }
+        };
+
+        if !meta.is_file() {
+            errors.push(format!("file '{path_str}': not a regular file"));
+            continue;
+        }
+
+        // Pre-read size guard to avoid allocating memory for huge files
+        let file_size = usize::try_from(meta.len()).unwrap_or(usize::MAX);
+        if file_size > budget {
+            errors.push(format!("file '{path_str}': exceeds 1MB limit"));
+            continue;
+        }
+
+        let bytes = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(e) => {
+                errors.push(format!("file '{path_str}': {e}"));
+                continue;
+            }
+        };
+
+        let text = match String::from_utf8(bytes) {
+            Ok(s) => s,
+            Err(_) => {
+                errors.push(format!("file '{path_str}': not valid UTF-8"));
+                continue;
+            }
+        };
+
+        total_bytes += text.len();
+        files.push((path_str, text));
+    }
+
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    if total_bytes > budget {
+        return Err(vec![format!(
+            "total file size ({total_bytes} bytes) exceeds 1MB limit"
+        )]);
+    }
+
+    Ok(files)
+}
+
+
 async fn build_provider(
     model: &str,
     timeout: Duration,
 ) -> Result<Arc<dyn ModelProvider>, Box<dyn std::error::Error>> {
     match model {
         m if m.starts_with("claude") => {
-            let model_name = m.strip_prefix("claude-").unwrap_or("sonnet");
+            let model_name = m.strip_prefix("claude-").unwrap_or("opus-4-6");
             let provider =
                 converge_providers::claude::ClaudeProvider::new(model_name, timeout).await?;
             Ok(Arc::new(provider))
         }
-        "codex" => {
-            let provider = converge_providers::codex::CodexProvider::new(timeout).await?;
+        m if m == "codex" || m.starts_with("codex-") => {
+            let model_name = m.strip_prefix("codex-").unwrap_or("gpt-5.4");
+            let provider =
+                converge_providers::codex::CodexProvider::new(model_name, "xhigh", timeout).await?;
             Ok(Arc::new(provider))
         }
         m if m.starts_with("gemini") => {
-            let model_name = if m == "gemini" { "gemini-2.5-pro" } else { m };
+            let model_name = if m == "gemini" { "gemini-3.1-pro-preview" } else { m };
             let provider =
                 converge_providers::gemini::GeminiProvider::new(model_name, timeout).await?;
             Ok(Arc::new(provider))
