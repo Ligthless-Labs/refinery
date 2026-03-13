@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::Arc;
 
@@ -8,9 +9,12 @@ use crate::ModelProvider;
 use crate::error::ProviderError;
 use crate::progress::{self, ProgressEvent, ProgressFn};
 use crate::prompts;
-use crate::types::{Message, ProposalSet};
+use crate::types::{Message, ModelId, ProposalSet};
 
 /// Execute the PROPOSE phase: each model independently produces an answer.
+///
+/// In round N>1, if `model_histories` is provided, each model's prompt is
+/// enriched with its full trajectory (prior proposals + reviews per round).
 #[allow(clippy::too_many_arguments)]
 pub async fn run(
     providers: &[Arc<dyn ModelProvider>],
@@ -20,6 +24,7 @@ pub async fn run(
     semaphore: &Arc<Semaphore>,
     timeout: std::time::Duration,
     additional_context: Option<&str>,
+    model_histories: Option<&HashMap<ModelId, Vec<(String, Vec<(String, String)>)>>>,
     progress: Option<ProgressFn>,
 ) -> ProposalSet {
     let mut proposals = std::collections::HashMap::new();
@@ -30,7 +35,15 @@ pub async fn run(
     for provider in providers {
         let model_id = provider.model_id().clone();
         let sem = semaphore.clone();
-        let mut user_content = prompts::propose_prompt(prompt, round_ctx);
+        let mut user_content = if let Some(histories) = model_histories {
+            if let Some(history) = histories.get(&model_id) {
+                prompts::propose_with_history_prompt(prompt, round_ctx, history)
+            } else {
+                prompts::propose_prompt(prompt, round_ctx)
+            }
+        } else {
+            prompts::propose_prompt(prompt, round_ctx)
+        };
         if let Some(ctx) = additional_context {
             let _ = write!(user_content, "\n\nAdditional context: {ctx}");
         }

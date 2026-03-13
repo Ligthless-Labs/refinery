@@ -110,6 +110,7 @@ impl Engine {
                 single_model: true,
                 single_model_elapsed: Some(elapsed),
                 progress: self.progress.clone(),
+                model_histories: HashMap::new(),
             });
         }
 
@@ -129,6 +130,7 @@ impl Engine {
             single_model: false,
             single_model_elapsed: None,
             progress: self.progress.clone(),
+            model_histories: HashMap::new(),
         })
     }
 }
@@ -150,6 +152,8 @@ pub struct Session<'a> {
     single_model: bool,
     single_model_elapsed: Option<std::time::Duration>,
     progress: Option<ProgressFn>,
+    /// Per-model trajectory: each entry is (proposal, reviews_received) for one completed round.
+    model_histories: HashMap<ModelId, Vec<(String, Vec<(String, String)>)>>,
 }
 
 impl Session<'_> {
@@ -254,6 +258,11 @@ impl Session<'_> {
             round,
             phase: Phase::Propose,
         });
+        let histories_ref = if self.model_histories.is_empty() {
+            None
+        } else {
+            Some(&self.model_histories)
+        };
         let proposal_set = phases::propose::run(
             &active_providers,
             &self.prompt,
@@ -262,6 +271,7 @@ impl Session<'_> {
             &semaphore,
             self.config.timeout,
             additional_context,
+            histories_ref,
             self.progress.clone(),
         )
         .await;
@@ -305,6 +315,22 @@ impl Session<'_> {
         call_count +=
             u32::try_from(evaluation_set.evaluations.len() + evaluation_set.dropped.len())
                 .unwrap_or(0);
+
+        // Collect per-model history: each model's proposal + reviews received this round
+        for (model_id, proposal) in &proposal_set.proposals {
+            let reviews: Vec<(String, String)> = evaluation_set
+                .evaluations
+                .iter()
+                .filter(|((_, evaluatee), _)| evaluatee == model_id)
+                .map(|((evaluator, _), eval)| {
+                    (evaluator.to_string(), eval.review.overall_assessment.clone())
+                })
+                .collect();
+            self.model_histories
+                .entry(model_id.clone())
+                .or_default()
+                .push((proposal.clone(), reviews));
+        }
 
         // Phase 3: REFINE
         self.emit(ProgressEvent::PhaseStarted {
