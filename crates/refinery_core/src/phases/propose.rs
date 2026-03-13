@@ -9,13 +9,13 @@ use crate::ModelProvider;
 use crate::error::ProviderError;
 use crate::progress::{self, ProgressEvent, ProgressFn};
 use crate::prompts;
-use crate::types::{Message, ModelId, ProposalSet};
+use crate::types::{Message, ModelId, ProposalSet, RoundHistory};
 
 /// Execute the PROPOSE phase: each model independently produces an answer.
 ///
 /// In round N>1, if `model_histories` is provided, each model's prompt is
 /// enriched with its full trajectory (prior proposals + reviews per round).
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::implicit_hasher)]
 pub async fn run(
     providers: &[Arc<dyn ModelProvider>],
     prompt: &str,
@@ -24,7 +24,7 @@ pub async fn run(
     semaphore: &Arc<Semaphore>,
     timeout: std::time::Duration,
     additional_context: Option<&str>,
-    model_histories: Option<&HashMap<ModelId, Vec<(String, Vec<(String, String)>)>>>,
+    model_histories: Option<&HashMap<ModelId, RoundHistory>>,
     progress: Option<ProgressFn>,
 ) -> ProposalSet {
     let mut proposals = std::collections::HashMap::new();

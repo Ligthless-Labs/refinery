@@ -10,7 +10,7 @@ use crate::prompts;
 use crate::strategy::{ClosingDecision, ClosingStrategy};
 use crate::types::{
     ConsensusOutcome, ConvergenceStatus, CostEstimate, EngineConfig, ModelAnswer, ModelId, Phase,
-    RoundOutcome, RoundOverrides,
+    RoundHistory, RoundOutcome, RoundOverrides,
 };
 use tokio::sync::Semaphore;
 
@@ -152,8 +152,8 @@ pub struct Session<'a> {
     single_model: bool,
     single_model_elapsed: Option<std::time::Duration>,
     progress: Option<ProgressFn>,
-    /// Per-model trajectory: each entry is (proposal, reviews_received) for one completed round.
-    model_histories: HashMap<ModelId, Vec<(String, Vec<(String, String)>)>>,
+    /// Per-model trajectory for history-aware proposals in round N>1.
+    model_histories: HashMap<ModelId, RoundHistory>,
 }
 
 impl Session<'_> {
