@@ -332,31 +332,25 @@ mod tests {
     }
 
     #[test]
-    fn extract_codex_valid() {
+    fn extract_codex_with_schema() {
+        // Real Codex --json + --output-schema format: answer in item.completed, turn.completed has only usage
         let jsonl = r#"{"type":"thread.started","thread_id":"t1"}
-{"type":"turn.started","turn_id":"u1"}
-{"type":"item.text_delta","content":"partial"}
-{"type":"turn.completed","turn_id":"u1","text":"{\"answer\":\"Full response text\"}","usage":{"input_tokens":100,"output_tokens":200}}"#;
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"{\"answer\":\"Full response text\"}"}}
+{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":200}}"#;
         let result = extract_codex_response(jsonl).unwrap();
         assert_eq!(result, "Full response text");
     }
 
     #[test]
-    fn extract_codex_plain_text_fallback() {
-        // When --output-schema is not used, text is plain (not JSON)
-        let jsonl = r#"{"type":"turn.completed","turn_id":"u1","text":"Plain text response"}"#;
-        let result = extract_codex_response(jsonl).unwrap();
-        assert_eq!(result, "Plain text response");
-    }
-
-    #[test]
-    fn extract_codex_item_completed() {
-        // With --output-schema, Codex emits item.completed with nested item.text
+    fn extract_codex_plain_text() {
+        // Real Codex --json format (no --output-schema): plain text in item.completed
         let jsonl = r#"{"type":"thread.started","thread_id":"t1"}
 {"type":"turn.started"}
-{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"{\"answer\":\"Hello there!\"}"}}"#;
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Plain text response"}}
+{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":200}}"#;
         let result = extract_codex_response(jsonl).unwrap();
-        assert_eq!(result, "Hello there!");
+        assert_eq!(result, "Plain text response");
     }
 
     #[test]
