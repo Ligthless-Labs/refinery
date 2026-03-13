@@ -52,7 +52,12 @@ impl Engine {
     }
 
     /// Run the consensus loop to completion.
-    pub async fn run(&self, prompt: &str) -> Result<ConsensusOutcome, ConvergeError> {
+    ///
+    /// Returns both the final outcome and per-round data for artifact export.
+    pub async fn run(
+        &self,
+        prompt: &str,
+    ) -> Result<(ConsensusOutcome, Vec<RoundOutcome>), ConvergeError> {
         let mut session = self.start(prompt).await?;
 
         loop {
@@ -60,7 +65,9 @@ impl Engine {
                 Ok(o) => o,
                 Err(ConvergeError::InsufficientModels { round, .. }) if round > 1 => {
                     // Graceful degradation: return best-so-far from prior rounds
-                    return Ok(session.finalize_with_status(ConvergenceStatus::InsufficientModels));
+                    return Ok(
+                        session.finalize_with_status(ConvergenceStatus::InsufficientModels),
+                    );
                 }
                 Err(e) => return Err(e),
             };
@@ -378,13 +385,13 @@ impl Session<'_> {
 
     /// Clean cancellation: return best-so-far with Cancelled status.
     #[must_use]
-    pub fn cancel(self) -> ConsensusOutcome {
+    pub fn cancel(self) -> (ConsensusOutcome, Vec<RoundOutcome>) {
         self.finalize_with_status(ConvergenceStatus::Cancelled)
     }
 
     /// Finalize after convergence or max rounds.
     #[must_use]
-    pub fn finalize(self) -> ConsensusOutcome {
+    pub fn finalize(self) -> (ConsensusOutcome, Vec<RoundOutcome>) {
         if self.single_model {
             return self.finalize_with_status(ConvergenceStatus::SingleModel);
         }
@@ -403,7 +410,7 @@ impl Session<'_> {
         }
     }
 
-    fn finalize_with_status(self, status: ConvergenceStatus) -> ConsensusOutcome {
+    fn finalize_with_status(self, status: ConvergenceStatus) -> (ConsensusOutcome, Vec<RoundOutcome>) {
         let winner = self
             .current_winner
             .unwrap_or_else(|| ModelId::from_parts("unknown", "unknown"));
@@ -422,7 +429,7 @@ impl Session<'_> {
             })
             .collect();
 
-        ConsensusOutcome {
+        let outcome = ConsensusOutcome {
             status,
             winner,
             answer,
@@ -430,7 +437,9 @@ impl Session<'_> {
             all_answers,
             total_calls: self.total_calls,
             elapsed: self.start_time.elapsed(),
-        }
+        };
+
+        (outcome, self.outcomes)
     }
 }
 
@@ -458,7 +467,7 @@ mod tests {
         let strategy = Box::new(crate::strategy::VoteThreshold::new(8.0, 2));
         let engine = Engine::new(providers, strategy, config, None);
 
-        let result = engine.run("test prompt").await.unwrap();
+        let (result, _rounds) = engine.run("test prompt").await.unwrap();
         assert_eq!(result.status, ConvergenceStatus::SingleModel);
         assert_eq!(result.winner, ModelId::new("test/solo"));
         assert_eq!(result.total_calls, 1);
@@ -476,7 +485,7 @@ mod tests {
         let strategy = Box::new(AlwaysConvergeAfterN::new(2));
         let engine = Engine::new(providers, strategy, config, None);
 
-        let result = engine.run("test prompt").await.unwrap();
+        let (result, _rounds) = engine.run("test prompt").await.unwrap();
         assert_eq!(result.status, ConvergenceStatus::Converged);
         assert_eq!(result.final_round, 2);
     }
@@ -493,7 +502,7 @@ mod tests {
         let strategy = Box::new(crate::strategy::VoteThreshold::new(8.0, 2));
         let engine = Engine::new(providers, strategy, config, None);
 
-        let result = engine.run("test prompt").await.unwrap();
+        let (result, _rounds) = engine.run("test prompt").await.unwrap();
         assert_eq!(result.status, ConvergenceStatus::MaxRoundsExceeded);
         assert_eq!(result.final_round, 3);
     }
@@ -509,7 +518,7 @@ mod tests {
         let strategy = Box::new(AlwaysConvergeAfterN::new(2));
         let engine = Engine::new(providers, strategy, config, None);
 
-        let result = engine.run("test prompt").await.unwrap();
+        let (result, _rounds) = engine.run("test prompt").await.unwrap();
         // Should still succeed with 2 models
         assert_eq!(result.status, ConvergenceStatus::Converged);
     }
@@ -555,7 +564,7 @@ mod tests {
         let result = engine.run("test prompt").await;
         // Should succeed with best-so-far, not error
         assert!(result.is_ok());
-        let outcome = result.unwrap();
+        let (outcome, _rounds) = result.unwrap();
         assert_eq!(outcome.status, ConvergenceStatus::InsufficientModels);
     }
 
@@ -585,7 +594,7 @@ mod tests {
             ClosingDecision::Converged { .. }
         ));
 
-        let result = session.finalize();
+        let (result, _rounds) = session.finalize();
         assert_eq!(result.status, ConvergenceStatus::Converged);
         assert_eq!(result.final_round, 2);
     }
@@ -603,7 +612,7 @@ mod tests {
         let mut session = engine.start("test prompt").await.unwrap();
         let _outcome = session.next_round().await.unwrap();
 
-        let result = session.cancel();
+        let (result, _rounds) = session.cancel();
         assert_eq!(result.status, ConvergenceStatus::Cancelled);
     }
 
