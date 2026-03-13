@@ -26,7 +26,7 @@ struct Cli {
     #[arg(long = "file", short = 'f', value_name = "PATH")]
     files: Vec<PathBuf>,
 
-    /// Comma-separated model list [e.g., claude,codex,gemini]
+    /// Comma-separated model list [e.g., claude-code,codex-cli/o3-pro,gemini-cli]
     #[arg(short, long, value_delimiter = ',')]
     models: Vec<String>,
 
@@ -195,10 +195,21 @@ async fn main() -> ExitCode {
         return ExitCode::from(4);
     }
 
-    let model_ids: Vec<ModelId> = cli.models.iter().map(ModelId::new).collect();
+    let model_ids: Vec<ModelId> = match cli
+        .models
+        .iter()
+        .map(|m| parse_model_spec(m))
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(ids) => ids,
+        Err(e) => {
+            eprintln!("Error: {e}");
+            return ExitCode::from(4);
+        }
+    };
 
     let config = match EngineConfig::new(
-        model_ids,
+        model_ids.clone(),
         cli.max_rounds,
         cli.threshold,
         2, // stability_rounds
@@ -317,11 +328,11 @@ async fn main() -> ExitCode {
 
     let mut providers: Vec<Arc<dyn ModelProvider>> = Vec::new();
 
-    for model in &cli.models {
-        match build_provider(model, timeout, idle_timeout, progress.clone()).await {
+    for model_id in &model_ids {
+        match build_provider(model_id, timeout, idle_timeout, progress.clone()).await {
             Ok(p) => providers.push(p),
             Err(e) => {
-                eprintln!("Failed to initialize provider '{model}': {e}");
+                eprintln!("Failed to initialize provider '{}': {e}", model_id);
                 return ExitCode::from(4);
             }
         }
@@ -350,7 +361,7 @@ async fn main() -> ExitCode {
                     let json_output = JsonOutput {
                         status: status_str,
                         winner: WinnerOutput {
-                            model_id: outcome.winner.as_str().to_string(),
+                            model_id: outcome.winner.to_string(),
                             answer: outcome.answer.clone(),
                         },
                         final_round: outcome.final_round,
@@ -359,7 +370,7 @@ async fn main() -> ExitCode {
                             .all_answers
                             .iter()
                             .map(|a| AnswerOutput {
-                                model_id: a.model_id.as_str().to_string(),
+                                model_id: a.model_id.to_string(),
                                 answer: a.answer.clone(),
                                 mean_score: a.mean_score,
                             })
@@ -479,17 +490,48 @@ fn read_and_validate_files(
     Ok(files)
 }
 
+/// Parse a CLI model spec into a `ModelId`.
+///
+/// Accepts `provider/model` or provider-only (applies default model).
+fn parse_model_spec(input: &str) -> Result<ModelId, String> {
+    if input.contains('/') {
+        let (provider, model) = input.split_once('/').unwrap();
+        if model.contains('/') {
+            return Err(format!(
+                "Model spec must be 'provider/model', got extra '/': '{input}'"
+            ));
+        }
+        if provider.is_empty() || model.is_empty() {
+            return Err(format!("Invalid model spec: '{input}'"));
+        }
+        Ok(ModelId::from_parts(provider, model))
+    } else {
+        match input {
+            "claude-code" => Ok(ModelId::from_parts("claude-code", "claude-opus-4-6")),
+            "codex-cli" => Ok(ModelId::from_parts("codex-cli", "gpt-5.4")),
+            "gemini-cli" => Ok(ModelId::from_parts("gemini-cli", "gemini-3.1-pro-preview")),
+            "claude" | "codex" | "gemini" => Err(format!(
+                "Unknown provider '{input}'. The format is now 'provider/model'. \
+                 Did you mean '{input}-code' or '{input}-cli'? \
+                 Supported providers: claude-code, codex-cli, gemini-cli"
+            )),
+            _ => Err(format!(
+                "Unknown provider '{input}'. Supported: claude-code, codex-cli, gemini-cli"
+            )),
+        }
+    }
+}
+
 async fn build_provider(
-    model: &str,
+    model_id: &ModelId,
     max_timeout: Duration,
     idle_timeout: Duration,
     progress: Option<refinery_core::ProgressFn>,
 ) -> Result<Arc<dyn ModelProvider>, Box<dyn std::error::Error>> {
-    match model {
-        m if m.starts_with("claude") => {
-            let model_name = m.strip_prefix("claude-").unwrap_or("opus-4-6");
+    match model_id.provider() {
+        "claude-code" => {
             let provider = refinery_providers::claude::ClaudeProvider::new(
-                model_name,
+                model_id.clone(),
                 max_timeout,
                 idle_timeout,
                 progress,
@@ -497,10 +539,9 @@ async fn build_provider(
             .await?;
             Ok(Arc::new(provider))
         }
-        m if m == "codex" || m.starts_with("codex-") => {
-            let model_name = m.strip_prefix("codex-").unwrap_or("gpt-5.4");
+        "codex-cli" => {
             let provider = refinery_providers::codex::CodexProvider::new(
-                model_name,
+                model_id.clone(),
                 "xhigh",
                 max_timeout,
                 idle_timeout,
@@ -509,14 +550,9 @@ async fn build_provider(
             .await?;
             Ok(Arc::new(provider))
         }
-        m if m.starts_with("gemini") => {
-            let model_name = if m == "gemini" {
-                "gemini-3.1-pro-preview"
-            } else {
-                m
-            };
+        "gemini-cli" => {
             let provider = refinery_providers::gemini::GeminiProvider::new(
-                model_name,
+                model_id.clone(),
                 max_timeout,
                 idle_timeout,
                 progress,
@@ -524,8 +560,8 @@ async fn build_provider(
             .await?;
             Ok(Arc::new(provider))
         }
-        _ => Err(format!(
-            "Unknown model: {model}. Supported: claude[-model], codex, gemini[-model]"
+        other => Err(format!(
+            "Unknown provider: '{other}'. Supported: claude-code, codex-cli, gemini-cli"
         )
         .into()),
     }
@@ -540,7 +576,7 @@ fn converge_error_to_detail(err: &refinery_core::ConvergeError) -> ErrorDetail {
         } => ErrorDetail {
             code: "phase_failure".to_string(),
             message: err.to_string(),
-            provider: Some(model.as_str().to_string()),
+            provider: Some(model.to_string()),
             round: None,
             phase: Some(phase.to_string()),
             retryable: true,
