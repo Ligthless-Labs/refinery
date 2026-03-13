@@ -77,7 +77,7 @@ mod tests {
     #[test]
     fn provider_error_display() {
         let err = ProviderError::Timeout {
-            model: ModelId::new("claude"),
+            model: ModelId::new("test/claude"),
             elapsed: Duration::from_secs(120),
         };
         assert!(err.to_string().contains("claude"));

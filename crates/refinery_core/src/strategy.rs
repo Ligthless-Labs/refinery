@@ -87,12 +87,12 @@ mod tests {
 
     fn round_data(mean_score: f64, stable_rounds: u32) -> RoundData {
         let mut mean_scores = HashMap::new();
-        mean_scores.insert(ModelId::new("model_a"), mean_score);
-        mean_scores.insert(ModelId::new("model_b"), mean_score - 1.0);
+        mean_scores.insert(ModelId::new("test/model_a"), mean_score);
+        mean_scores.insert(ModelId::new("test/model_b"), mean_score - 1.0);
         RoundData {
             round: 3,
             mean_scores,
-            previous_winner: Some(ModelId::new("model_a")),
+            previous_winner: Some(ModelId::new("test/model_a")),
             stable_rounds,
         }
     }
@@ -122,12 +122,12 @@ mod tests {
     #[tokio::test]
     async fn all_scores_identical_converges() {
         let mut mean_scores = HashMap::new();
-        mean_scores.insert(ModelId::new("a"), 9.0);
-        mean_scores.insert(ModelId::new("b"), 9.0);
+        mean_scores.insert(ModelId::new("test/a"), 9.0);
+        mean_scores.insert(ModelId::new("test/b"), 9.0);
         let data = RoundData {
             round: 3,
             mean_scores,
-            previous_winner: Some(ModelId::new("a")),
+            previous_winner: Some(ModelId::new("test/a")),
             stable_rounds: 2,
         };
         let strategy = VoteThreshold::new(8.0, 2);
