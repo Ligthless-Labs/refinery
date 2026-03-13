@@ -82,7 +82,7 @@ mod tests {
         let mut evals = HashMap::new();
         // model_b evaluates model_a: score 8
         evals.insert(
-            (ModelId::new("b"), ModelId::new("a")),
+            (ModelId::new("test/b"), ModelId::new("test/a")),
             Evaluation {
                 review: Review {
                     strengths: vec![],
@@ -96,7 +96,7 @@ mod tests {
         );
         // model_c evaluates model_a: score 6
         evals.insert(
-            (ModelId::new("c"), ModelId::new("a")),
+            (ModelId::new("test/c"), ModelId::new("test/a")),
             Evaluation {
                 review: Review {
                     strengths: vec![],
@@ -116,6 +116,6 @@ mod tests {
 
         let means = compute_mean_scores(&eval_set);
         // model_a: (8 + 6) / 2 = 7.0
-        assert!((means[&ModelId::new("a")] - 7.0).abs() < f64::EPSILON);
+        assert!((means[&ModelId::new("test/a")] - 7.0).abs() < f64::EPSILON);
     }
 }
