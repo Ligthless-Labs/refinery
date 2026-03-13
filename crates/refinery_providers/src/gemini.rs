@@ -56,7 +56,7 @@ impl GeminiProvider {
             "plan".to_string(),
             "--allowed-tools".to_string(),
             String::new(), // empty string for no tools
-            "--".to_string(),
+            "--prompt".to_string(),
             user_prompt.to_string(),
         ]
     }
@@ -146,7 +146,7 @@ mod tests {
         assert!(args.contains(&"plan".to_string()));
         assert!(args.contains(&"--allowed-tools".to_string()));
         assert!(args.contains(&String::new())); // empty for no tools
-        assert!(args.contains(&"--".to_string())); // sentinel
+        assert!(args.contains(&"--prompt".to_string()));
         assert!(args.contains(&"user prompt".to_string()));
     }
 }

@@ -58,7 +58,7 @@ impl ClaudeProvider {
             "--effort".to_string(),
             "high".to_string(),
             "--model".to_string(),
-            self.model_name.clone(),
+            format!("claude-{}", self.model_name),
             "--append-system-prompt".to_string(),
             system_prompt.to_string(),
             "--".to_string(),
