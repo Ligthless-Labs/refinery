@@ -266,7 +266,7 @@ mod tests {
   "score": 7
 }
 ```"#;
-        let model = ModelId::new("test");
+        let model = ModelId::new("test/eval");
         let eval = parse_evaluation(json, &model).unwrap();
         assert_eq!(eval.score.value(), 7);
         assert_eq!(eval.review.strengths.len(), 2);
@@ -276,21 +276,21 @@ mod tests {
     #[test]
     fn parse_evaluation_invalid_score() {
         let json = r#"{"strengths": [], "weaknesses": [], "suggestions": [], "overall_assessment": "", "rationale": "", "score": 15}"#;
-        let model = ModelId::new("test");
+        let model = ModelId::new("test/eval");
         let result = parse_evaluation(json, &model);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_evaluation_no_json() {
-        let model = ModelId::new("test");
+        let model = ModelId::new("test/eval");
         let result = parse_evaluation("No JSON here", &model);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_evaluation_too_large() {
-        let model = ModelId::new("test");
+        let model = ModelId::new("test/eval");
         let large = "x".repeat(200_000);
         let result = parse_evaluation(&large, &model);
         assert!(matches!(

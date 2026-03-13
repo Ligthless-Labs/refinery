@@ -159,7 +159,7 @@ impl ClosingStrategy for AlwaysConvergeAfterN {
                 .keys()
                 .next()
                 .cloned()
-                .unwrap_or_else(|| ModelId::new("mock_winner"));
+                .unwrap_or_else(|| ModelId::from_parts("mock", "winner"));
             ClosingDecision::Converged {
                 winner,
                 explanation: "Mock convergence".to_string(),
@@ -180,14 +180,14 @@ mod tests {
 
     #[tokio::test]
     async fn echo_provider_returns_default() {
-        let provider = EchoProvider::new("test");
+        let provider = EchoProvider::new("test/echo");
         let result = provider.send_message(&[]).await.unwrap();
-        assert!(result.contains("Echo response from test"));
+        assert!(result.contains("Echo response from test/echo"));
     }
 
     #[tokio::test]
     async fn echo_provider_returns_queued() {
-        let provider = EchoProvider::new("test");
+        let provider = EchoProvider::new("test/echo");
         provider.queue_response("first".to_string());
         provider.queue_response("second".to_string());
 
@@ -198,13 +198,13 @@ mod tests {
 
     #[tokio::test]
     async fn failing_provider_always_fails() {
-        let provider = FailingProvider::new("fail");
+        let provider = FailingProvider::new("test/fail");
         assert!(provider.send_message(&[]).await.is_err());
     }
 
     #[tokio::test]
     async fn fail_after_n_succeeds_then_fails() {
-        let provider = FailAfterNProvider::new("countdown", 2);
+        let provider = FailAfterNProvider::new("test/countdown", 2);
         assert!(provider.send_message(&[]).await.is_ok());
         assert!(provider.send_message(&[]).await.is_ok());
         assert!(provider.send_message(&[]).await.is_err());
@@ -212,8 +212,8 @@ mod tests {
 
     #[tokio::test]
     async fn trait_object_safety() {
-        let provider: Box<dyn ModelProvider> = Box::new(EchoProvider::new("test"));
-        assert_eq!(provider.model_id(), &ModelId::new("test"));
+        let provider: Box<dyn ModelProvider> = Box::new(EchoProvider::new("test/echo"));
+        assert_eq!(provider.model_id(), &ModelId::new("test/echo"));
         assert!(provider.send_message(&[]).await.is_ok());
     }
 }
