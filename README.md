@@ -48,12 +48,12 @@ Available models:
 
 | Alias | Provider | Model |
 |-------|----------|-------|
+| `claude-opus-4-6` | Anthropic | claude-opus-4-6 (effort: high) |
 | `claude-sonnet` | Anthropic | claude-sonnet |
-| `claude-opus` | Anthropic | claude-opus |
-| `codex` | OpenAI | codex |
-| `gemini-2.5-pro` | Google | gemini-2.5-pro |
+| `codex` | OpenAI | gpt-5.4 (reasoning: xhigh) |
+| `gemini-3.1-pro-preview` | Google | gemini-3.1-pro-preview |
 
-Short aliases: `claude` = `claude-sonnet`, `gemini` = `gemini-2.5-pro`. Any `claude-*` value (e.g., `claude-haiku`) is passed through to Anthropic.
+Short aliases: `claude` = `claude-opus-4-6`, `gemini` = `gemini-3.1-pro-preview`. Any `claude-*` value (e.g., `claude-sonnet`) is passed through to Anthropic. Any `codex-*` value (e.g., `codex-o3`) overrides the model.
 
 ### Options
 
@@ -92,7 +92,7 @@ converge "prompt" --models claude,codex --output-format json
 ```json
 {
   "status": "converged",
-  "winner": { "model_id": "claude-sonnet", "answer": "..." },
+  "winner": { "model_id": "claude-opus-4-6", "answer": "..." },
   "final_round": 2,
   "strategy": "vote-threshold",
   "all_answers": [{ "model_id": "...", "answer": "...", "mean_score": 9.5 }],
@@ -107,6 +107,23 @@ Estimate API call count without running
 ```sh
 converge "prompt" --models claude,codex,gemini --dry-run
 ```
+
+### File Input
+
+Pass one or more files with `-f`/`--file` (repeatable, 1 MB total)
+
+```sh
+# Files as the subject — no text prompt needed
+converge --file src/auth.rs --file src/crypto.rs --models claude,codex,gemini
+
+# Files with an instruction prompt
+converge "review these for security issues" --file src/auth.rs --file src/lib.rs --models claude,codex
+
+# Combine stdin instruction with a file
+echo "what does this do?" | converge - --file src/main.rs --models claude,gemini
+```
+
+File contents are wrapped in nonce-tagged blocks (`<file-{nonce} path="...">`) so models know which content came from where. Non-UTF-8 files and files exceeding the 1 MB budget are rejected with a clear error before any API calls are made.
 
 ### Reading from Stdin
 
