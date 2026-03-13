@@ -11,6 +11,7 @@ use crate::prompts;
 use crate::types::{Message, ProposalSet};
 
 /// Execute the PROPOSE phase: each model independently produces an answer.
+#[allow(clippy::too_many_arguments)]
 pub async fn run(
     providers: &[Arc<dyn ModelProvider>],
     prompt: &str,
