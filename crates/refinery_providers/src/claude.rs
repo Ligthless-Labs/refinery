@@ -11,7 +11,7 @@ use crate::process;
 
 /// Claude CLI provider adapter.
 ///
-/// Invokes: `claude -p --output-format json --tools "" --max-turns 1 --effort high --model claude-opus-4-6 --append-system-prompt "SYSTEM" -- "PROMPT"`
+/// Invokes: `claude -p --output-format text --tools "" --max-turns 1 --effort high --model claude-opus-4-6 --json-schema {...} --append-system-prompt "SYSTEM" -- "PROMPT"`
 ///
 /// Supports: `ANTHROPIC_API_KEY` (pay-per-use) or `CLAUDE_CODE_OAUTH_TOKEN` (Pro/Max subscription).
 /// When neither is set, falls back to the Claude CLI's own stored credentials (`~/.claude.json`).
@@ -50,7 +50,7 @@ impl ClaudeProvider {
         vec![
             "-p".to_string(),
             "--output-format".to_string(),
-            "json".to_string(),
+            "text".to_string(),
             "--tools".to_string(),
             String::new(), // empty string disables all tools
             "--max-turns".to_string(),
@@ -59,6 +59,9 @@ impl ClaudeProvider {
             "high".to_string(),
             "--model".to_string(),
             format!("claude-{}", self.model_name),
+            "--json-schema".to_string(),
+            r#"{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"]}"#
+                .to_string(),
             "--append-system-prompt".to_string(),
             system_prompt.to_string(),
             "--".to_string(),
@@ -129,7 +132,8 @@ mod tests {
 
         assert!(args.contains(&"-p".to_string()));
         assert!(args.contains(&"--output-format".to_string()));
-        assert!(args.contains(&"json".to_string()));
+        assert!(args.contains(&"text".to_string()));
+        assert!(args.contains(&"--json-schema".to_string()));
         assert!(args.contains(&"--tools".to_string()));
         assert!(args.contains(&String::new())); // empty string for --tools
         assert!(args.contains(&"--max-turns".to_string()));
