@@ -231,7 +231,7 @@ impl Session<'_> {
         let previous_scores: Vec<(String, f64)> = self
             .last_mean_scores
             .iter()
-            .map(|(id, score)| (id.as_str().to_string(), *score))
+            .map(|(id, score)| (id.to_string(), *score))
             .collect();
 
         let round_ctx = prompts::round_context(
@@ -243,7 +243,7 @@ impl Session<'_> {
             self.config.threshold,
             self.config.stability_rounds,
             &previous_scores,
-            self.current_winner.as_ref().map(ModelId::as_str),
+            self.current_winner.as_ref().map(|id| id.to_string()).as_deref(),
             self.stable_rounds,
             false,
         );
@@ -406,7 +406,7 @@ impl Session<'_> {
     fn finalize_with_status(self, status: ConvergenceStatus) -> ConsensusOutcome {
         let winner = self
             .current_winner
-            .unwrap_or_else(|| ModelId::new("unknown"));
+            .unwrap_or_else(|| ModelId::from_parts("unknown", "unknown"));
         let answer = self.last_answers.get(&winner).cloned().unwrap_or_default();
 
         let all_answers: Vec<ModelAnswer> = self
@@ -447,20 +447,20 @@ mod tests {
     }
 
     fn default_config(n: usize) -> EngineConfig {
-        let models: Vec<ModelId> = (0..n).map(|i| ModelId::new(format!("model_{i}"))).collect();
+        let models: Vec<ModelId> = (0..n).map(|i| ModelId::new(format!("test/model_{i}"))).collect();
         EngineConfig::new(models, 5, 8.0, 2, std::time::Duration::from_secs(120), 10).unwrap()
     }
 
     #[tokio::test(flavor = "current_thread", start_paused = true)]
     async fn single_model_short_circuits() {
-        let providers = make_providers(&["solo"]);
+        let providers = make_providers(&["test/solo"]);
         let config = default_config(1);
         let strategy = Box::new(crate::strategy::VoteThreshold::new(8.0, 2));
         let engine = Engine::new(providers, strategy, config, None);
 
         let result = engine.run("test prompt").await.unwrap();
         assert_eq!(result.status, ConvergenceStatus::SingleModel);
-        assert_eq!(result.winner, ModelId::new("solo"));
+        assert_eq!(result.winner, ModelId::new("test/solo"));
         assert_eq!(result.total_calls, 1);
         assert_eq!(result.final_round, 1);
     }
@@ -468,9 +468,9 @@ mod tests {
     #[tokio::test(flavor = "current_thread", start_paused = true)]
     async fn converges_with_mock_providers() {
         let providers: Vec<Arc<dyn ModelProvider>> = vec![
-            Arc::new(EchoProvider::with_json_eval("model_a", 9)),
-            Arc::new(EchoProvider::with_json_eval("model_b", 9)),
-            Arc::new(EchoProvider::with_json_eval("model_c", 9)),
+            Arc::new(EchoProvider::with_json_eval("test/model_a", 9)),
+            Arc::new(EchoProvider::with_json_eval("test/model_b", 9)),
+            Arc::new(EchoProvider::with_json_eval("test/model_c", 9)),
         ];
         let config = default_config(3);
         let strategy = Box::new(AlwaysConvergeAfterN::new(2));
@@ -484,10 +484,10 @@ mod tests {
     #[tokio::test(flavor = "current_thread", start_paused = true)]
     async fn max_rounds_exceeded() {
         let providers: Vec<Arc<dyn ModelProvider>> = vec![
-            Arc::new(EchoProvider::with_json_eval("model_a", 5)),
-            Arc::new(EchoProvider::with_json_eval("model_b", 5)),
+            Arc::new(EchoProvider::with_json_eval("test/model_a", 5)),
+            Arc::new(EchoProvider::with_json_eval("test/model_b", 5)),
         ];
-        let models = vec![ModelId::new("model_a"), ModelId::new("model_b")];
+        let models = vec![ModelId::new("test/model_a"), ModelId::new("test/model_b")];
         let config =
             EngineConfig::new(models, 3, 8.0, 2, std::time::Duration::from_secs(120), 10).unwrap();
         let strategy = Box::new(crate::strategy::VoteThreshold::new(8.0, 2));
@@ -501,9 +501,9 @@ mod tests {
     #[tokio::test(flavor = "current_thread", start_paused = true)]
     async fn partial_failure_drops_model() {
         let providers: Vec<Arc<dyn ModelProvider>> = vec![
-            Arc::new(EchoProvider::with_json_eval("model_a", 9)),
-            Arc::new(EchoProvider::with_json_eval("model_b", 9)),
-            Arc::new(FailingProvider::new("model_c")),
+            Arc::new(EchoProvider::with_json_eval("test/model_a", 9)),
+            Arc::new(EchoProvider::with_json_eval("test/model_b", 9)),
+            Arc::new(FailingProvider::new("test/model_c")),
         ];
         let config = default_config(3);
         let strategy = Box::new(AlwaysConvergeAfterN::new(2));
@@ -517,8 +517,8 @@ mod tests {
     #[tokio::test(flavor = "current_thread", start_paused = true)]
     async fn all_models_fail_returns_error() {
         let providers: Vec<Arc<dyn ModelProvider>> = vec![
-            Arc::new(FailingProvider::new("model_a")),
-            Arc::new(FailingProvider::new("model_b")),
+            Arc::new(FailingProvider::new("test/model_a")),
+            Arc::new(FailingProvider::new("test/model_b")),
         ];
         let config = default_config(2);
         let strategy = Box::new(crate::strategy::VoteThreshold::new(8.0, 2));
@@ -538,14 +538,14 @@ mod tests {
         // In round 2, model_b also fails → only 1 proposal → InsufficientModels.
         // Engine::run should return best-so-far, not an error.
         let providers: Vec<Arc<dyn ModelProvider>> = vec![
-            Arc::new(EchoProvider::with_json_eval("model_a", 9)),
-            Arc::new(FailAfterNProvider::new("model_b", 1)),
-            Arc::new(FailingProvider::new("model_c")),
+            Arc::new(EchoProvider::with_json_eval("test/model_a", 9)),
+            Arc::new(FailAfterNProvider::new("test/model_b", 1)),
+            Arc::new(FailingProvider::new("test/model_c")),
         ];
         let models = vec![
-            ModelId::new("model_a"),
-            ModelId::new("model_b"),
-            ModelId::new("model_c"),
+            ModelId::new("test/model_a"),
+            ModelId::new("test/model_b"),
+            ModelId::new("test/model_c"),
         ];
         let config =
             EngineConfig::new(models, 5, 8.0, 2, std::time::Duration::from_secs(120), 10).unwrap();
@@ -562,8 +562,8 @@ mod tests {
     #[tokio::test(flavor = "current_thread", start_paused = true)]
     async fn stepping_api_works() {
         let providers: Vec<Arc<dyn ModelProvider>> = vec![
-            Arc::new(EchoProvider::with_json_eval("model_a", 9)),
-            Arc::new(EchoProvider::with_json_eval("model_b", 9)),
+            Arc::new(EchoProvider::with_json_eval("test/model_a", 9)),
+            Arc::new(EchoProvider::with_json_eval("test/model_b", 9)),
         ];
         let config = default_config(2);
         let strategy = Box::new(AlwaysConvergeAfterN::new(2));
@@ -593,8 +593,8 @@ mod tests {
     #[tokio::test(flavor = "current_thread", start_paused = true)]
     async fn stepping_api_cancel() {
         let providers: Vec<Arc<dyn ModelProvider>> = vec![
-            Arc::new(EchoProvider::with_json_eval("model_a", 5)),
-            Arc::new(EchoProvider::with_json_eval("model_b", 5)),
+            Arc::new(EchoProvider::with_json_eval("test/model_a", 5)),
+            Arc::new(EchoProvider::with_json_eval("test/model_b", 5)),
         ];
         let config = default_config(2);
         let strategy = Box::new(crate::strategy::VoteThreshold::new(8.0, 2));
@@ -610,9 +610,9 @@ mod tests {
     #[tokio::test(flavor = "current_thread", start_paused = true)]
     async fn stepping_api_with_overrides() {
         let providers: Vec<Arc<dyn ModelProvider>> = vec![
-            Arc::new(EchoProvider::with_json_eval("model_a", 9)),
-            Arc::new(EchoProvider::with_json_eval("model_b", 9)),
-            Arc::new(EchoProvider::with_json_eval("model_c", 9)),
+            Arc::new(EchoProvider::with_json_eval("test/model_a", 9)),
+            Arc::new(EchoProvider::with_json_eval("test/model_b", 9)),
+            Arc::new(EchoProvider::with_json_eval("test/model_c", 9)),
         ];
         let config = default_config(3);
         let strategy = Box::new(AlwaysConvergeAfterN::new(1));
@@ -622,7 +622,7 @@ mod tests {
 
         let overrides = RoundOverrides {
             additional_context: Some("Focus on security.".to_string()),
-            drop_models: vec![ModelId::new("model_c")],
+            drop_models: vec![ModelId::new("test/model_c")],
         };
         let outcome = session.next_round_with(overrides).await.unwrap();
         // model_c should not appear in proposals
@@ -630,7 +630,7 @@ mod tests {
             !outcome
                 .proposals
                 .proposals
-                .contains_key(&ModelId::new("model_c"))
+                .contains_key(&ModelId::new("test/model_c"))
         );
     }
 
