@@ -221,11 +221,16 @@ fn parse_evaluation(response: &str, model: &ModelId) -> Result<Evaluation, Provi
 
     let rationale = parsed["rationale"].as_str().unwrap_or("").to_string();
 
+    // Accept score as integer (8) or float (8.0) — models may emit either
     let score_value = parsed["score"]
         .as_u64()
+        .or_else(|| parsed["score"].as_f64().map(|f| f.round() as u64))
         .ok_or_else(|| ProviderError::InvalidJson {
             model: model.clone(),
-            message: "missing or invalid 'score' field".to_string(),
+            message: format!(
+                "missing or invalid 'score' field (got: {})",
+                parsed["score"]
+            ),
         })?;
 
     let score_u8 = u8::try_from(score_value).map_err(|_| ProviderError::InvalidJson {
@@ -271,6 +276,14 @@ mod tests {
         assert_eq!(eval.score.value(), 7);
         assert_eq!(eval.review.strengths.len(), 2);
         assert_eq!(eval.review.weaknesses.len(), 1);
+    }
+
+    #[test]
+    fn parse_valid_evaluation_float_score() {
+        let json = r#"{"strengths": ["clear"], "weaknesses": [], "suggestions": [], "overall_assessment": "Good.", "rationale": "Clear.", "score": 8.0}"#;
+        let model = ModelId::new("test/eval");
+        let eval = parse_evaluation(json, &model).unwrap();
+        assert_eq!(eval.score.value(), 8);
     }
 
     #[test]
