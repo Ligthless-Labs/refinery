@@ -167,7 +167,9 @@ async fn main() -> ExitCode {
     // Read and validate files (runs even during --dry-run for early validation)
     let prompt_bytes = prompt_text.as_deref().map_or(0, str::len);
     let file_budget = 1_000_000_usize.saturating_sub(prompt_bytes);
-    let file_data: Vec<(String, String)> = if !cli.files.is_empty() {
+    let file_data: Vec<(String, String)> = if cli.files.is_empty() {
+        Vec::new()
+    } else {
         match read_and_validate_files(&cli.files, file_budget) {
             Ok(data) => data,
             Err(errors) => {
@@ -177,8 +179,6 @@ async fn main() -> ExitCode {
                 return ExitCode::from(4);
             }
         }
-    } else {
-        Vec::new()
     };
 
     // Assemble the final prompt
@@ -365,12 +365,9 @@ fn read_and_validate_files(
             }
         };
 
-        let text = match String::from_utf8(bytes) {
-            Ok(s) => s,
-            Err(_) => {
-                errors.push(format!("file '{path_str}': not valid UTF-8"));
-                continue;
-            }
+        let Ok(text) = String::from_utf8(bytes) else {
+            errors.push(format!("file '{path_str}': not valid UTF-8"));
+            continue;
         };
 
         total_bytes += text.len();

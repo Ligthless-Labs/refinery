@@ -52,6 +52,7 @@ pub fn resolve_credential(
 /// Try env vars in order. Return `Some` on match, `None` when none are set.
 ///
 /// Use this when a provider can fall back to the CLI's own stored credentials.
+#[must_use] 
 pub fn try_resolve_credential(provider: &str, candidates: &[&'static str]) -> Option<Credential> {
     resolve_credential(provider, candidates).ok()
 }
