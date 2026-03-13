@@ -9,8 +9,8 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tracing::{debug, warn};
 
-/// Maximum response size in bytes (512KB).
-const MAX_RESPONSE_SIZE: usize = 512_000;
+/// Maximum response size in bytes (1MB).
+const MAX_RESPONSE_SIZE: usize = 1_000_000;
 
 /// Return a sanitized PATH for child processes.
 ///

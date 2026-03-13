@@ -158,7 +158,7 @@ pub async fn run(
 /// Parse an evaluation response (JSON) into an `Evaluation`.
 fn parse_evaluation(response: &str, model: &ModelId) -> Result<Evaluation, ProviderError> {
     // Check response size
-    const MAX_RESPONSE_SIZE: usize = 512_000;
+    const MAX_RESPONSE_SIZE: usize = 1_000_000;
     if response.len() > MAX_RESPONSE_SIZE {
         return Err(ProviderError::ResponseTooLarge {
             model: model.clone(),
@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn parse_evaluation_too_large() {
         let model = ModelId::new("test");
-        let large = "x".repeat(600_000);
+        let large = "x".repeat(1_100_000);
         let result = parse_evaluation(&large, &model);
         assert!(matches!(
             result,
