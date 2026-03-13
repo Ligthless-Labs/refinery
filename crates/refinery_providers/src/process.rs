@@ -55,8 +55,9 @@ pub async fn spawn_cli(
     // Security: clear all inherited environment
     cmd.env_clear();
 
-    // Inject minimal PATH for child process needs
-    cmd.env("PATH", "/usr/bin:/usr/local/bin:/bin");
+    // Inherit PATH so CLI tools can resolve their own dependencies (e.g. node for gemini)
+    let path = std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/usr/local/bin:/bin".to_string());
+    cmd.env("PATH", path);
 
     // Inject provider-specific env vars
     for (key, value) in env_vars {
