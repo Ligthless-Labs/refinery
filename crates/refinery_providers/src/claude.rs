@@ -11,7 +11,7 @@ use crate::process;
 
 /// Claude CLI provider adapter.
 ///
-/// Invokes: `claude -p --output-format text --tools "" --max-turns 1 --effort high --model claude-opus-4-6 --json-schema {...} --append-system-prompt "SYSTEM" -- "PROMPT"`
+/// Invokes: `claude -p --output-format text --tools "" --max-turns 1 --model claude-opus-4-6 --json-schema {...} --append-system-prompt "SYSTEM" -- "PROMPT"`
 ///
 /// Supports: `ANTHROPIC_API_KEY` (pay-per-use) or `CLAUDE_CODE_OAUTH_TOKEN` (Pro/Max subscription).
 /// When neither is set, falls back to the Claude CLI's own stored credentials (`~/.claude.json`).
@@ -55,8 +55,6 @@ impl ClaudeProvider {
             String::new(), // empty string disables all tools
             "--max-turns".to_string(),
             "1".to_string(),
-            "--effort".to_string(),
-            "high".to_string(),
             "--model".to_string(),
             format!("claude-{}", self.model_name),
             "--json-schema".to_string(),
