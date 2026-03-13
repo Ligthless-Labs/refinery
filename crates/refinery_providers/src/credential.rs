@@ -1,6 +1,6 @@
 use std::fmt;
 
-use converge_core::error::ProviderError;
+use refinery_core::error::ProviderError;
 use tracing::info;
 
 /// A resolved credential: the env var name and its value.

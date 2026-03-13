@@ -1,5 +1,5 @@
 [package]
-name = "converge_providers"
+name = "refinery_providers"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,7 +11,7 @@ codex = []
 gemini = []
 
 [dependencies]
-converge_core = { workspace = true }
+refinery_core = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

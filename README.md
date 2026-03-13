@@ -1,15 +1,15 @@
-# ConVerge Refinery
+# Refinery
 
 Iteratively reach consensus across multiple AI models
 
-[![Build Status](https://github.com/Bande-a-Bonnot/converge-refinery/actions/workflows/ci.yml/badge.svg)](https://github.com/Bande-a-Bonnot/converge-refinery/actions/workflows/ci.yml)
+[![Build Status](https://github.com/Ligthless-Labs/refinery/actions/workflows/ci.yml/badge.svg)](https://github.com/Ligthless-Labs/refinery/actions/workflows/ci.yml)
 
 ## Getting Started
 
 ### As a CLI
 
 ```sh
-cargo install --path crates/converge_cli
+cargo install --path crates/refinery_cli
 ```
 
 Requires [Rust](https://www.rust-lang.org/tools/install) 1.85+.
@@ -20,7 +20,7 @@ Add to your `Cargo.toml`
 
 ```toml
 [dependencies]
-converge_core = "0.1"
+refinery_core = "0.1"
 ```
 
 ## Quick Start
@@ -28,7 +28,7 @@ converge_core = "0.1"
 Set up credentials for at least one provider (see [Credentials](#credentials))
 
 ```sh
-converge "What are the three most impactful breakthroughs in physics?" \
+refinery "What are the three most impactful breakthroughs in physics?" \
   --models claude,codex,gemini
 ```
 
@@ -41,7 +41,7 @@ Models propose, review, refine, and repeat until consensus.
 Pass models as a comma-separated list
 
 ```sh
-converge "your prompt" --models claude,gemini
+refinery "your prompt" --models claude,gemini
 ```
 
 Available models:
@@ -59,25 +59,25 @@ Any `claude-*` value (e.g., `claude-sonnet`) is passed through to Anthropic. Any
 Set the convergence threshold
 
 ```sh
-converge "prompt" --models claude,codex --threshold 9.0
+refinery "prompt" --models claude,codex --threshold 9.0
 ```
 
 Limit the number of rounds
 
 ```sh
-converge "prompt" --models claude,codex --max-rounds 3
+refinery "prompt" --models claude,codex --max-rounds 3
 ```
 
 Set per-call timeout (seconds)
 
 ```sh
-converge "prompt" --models claude,codex --timeout 180
+refinery "prompt" --models claude,codex --timeout 180
 ```
 
 Limit concurrent API calls
 
 ```sh
-converge "prompt" --models claude,codex --max-concurrent 4
+refinery "prompt" --models claude,codex --max-concurrent 4
 ```
 
 ### Output Formats
@@ -85,7 +85,7 @@ converge "prompt" --models claude,codex --max-concurrent 4
 Output is plain text by default. Get JSON for programmatic use
 
 ```sh
-converge "prompt" --models claude,codex --output-format json
+refinery "prompt" --models claude,codex --output-format json
 ```
 
 ```json
@@ -104,7 +104,7 @@ converge "prompt" --models claude,codex --output-format json
 Estimate API call count without running
 
 ```sh
-converge "prompt" --models claude,codex,gemini --dry-run
+refinery "prompt" --models claude,codex,gemini --dry-run
 ```
 
 ### File Input
@@ -113,13 +113,13 @@ Pass one or more files with `-f`/`--file` (repeatable, 1 MB total)
 
 ```sh
 # Files as the subject — no text prompt needed
-converge --file src/auth.rs --file src/crypto.rs --models claude,codex,gemini
+refinery --file src/auth.rs --file src/crypto.rs --models claude,codex,gemini
 
 # Files with an instruction prompt
-converge "review these for security issues" --file src/auth.rs --file src/lib.rs --models claude,codex
+refinery "review these for security issues" --file src/auth.rs --file src/lib.rs --models claude,codex
 
 # Combine stdin instruction with a file
-echo "what does this do?" | converge - --file src/main.rs --models claude,gemini
+echo "what does this do?" | refinery - --file src/main.rs --models claude,gemini
 ```
 
 File contents are wrapped in nonce-tagged blocks (`<file-{nonce} path="...">`) so models know which content came from where. Non-UTF-8 files and files exceeding the 1 MB budget are rejected with a clear error before any API calls are made.
@@ -129,14 +129,14 @@ File contents are wrapped in nonce-tagged blocks (`<file-{nonce} path="...">`) s
 Pipe a prompt from another command (max 1 MB)
 
 ```sh
-cat question.txt | converge - --models claude,codex
+cat question.txt | refinery - --models claude,codex
 ```
 
 ### Verbose and Debug
 
 ```sh
-converge "prompt" --models claude,codex --verbose  # per-round progress
-converge "prompt" --models claude,codex --debug    # raw CLI invocations
+refinery "prompt" --models claude,codex --verbose  # per-round progress
+refinery "prompt" --models claude,codex --debug    # raw CLI invocations
 ```
 
 ### Exit Codes
@@ -157,7 +157,7 @@ Run the full consensus loop
 
 ```rust
 use std::time::Duration;
-use converge_core::{Engine, EngineConfig, ModelId, VoteThreshold};
+use refinery_core::{Engine, EngineConfig, ModelId, VoteThreshold};
 
 let config = EngineConfig::new(
     vec![ModelId::new("model-a"), ModelId::new("model-b")],
@@ -181,7 +181,7 @@ println!("{}: {}", outcome.winner, outcome.answer);
 Step through rounds for fine-grained control
 
 ```rust
-use converge_core::ClosingDecision;
+use refinery_core::ClosingDecision;
 
 let mut session = engine.start("prompt").await?;
 
@@ -200,7 +200,7 @@ let outcome = session.finalize();
 Inject overrides between rounds
 
 ```rust
-use converge_core::RoundOverrides;
+use refinery_core::RoundOverrides;
 
 let overrides = RoundOverrides {
     additional_context: Some("Focus on recent developments".into()),
@@ -215,7 +215,7 @@ Implement the `ModelProvider` trait
 
 ```rust
 use async_trait::async_trait;
-use converge_core::{ModelId, ModelProvider, Message, ProviderError};
+use refinery_core::{ModelId, ModelProvider, Message, ProviderError};
 
 #[derive(Debug)]
 struct MyProvider { model_id: ModelId }
@@ -347,15 +347,15 @@ Each round makes N² + N API calls (e.g., 3 models = 12 calls). Use `--dry-run` 
 
 Everyone is encouraged to help improve this project. Here are a few ways you can help:
 
-- [Report bugs](https://github.com/Bande-a-Bonnot/converge-refinery/issues)
-- Fix bugs and [submit pull requests](https://github.com/Bande-a-Bonnot/converge-refinery/pulls)
+- [Report bugs](https://github.com/Ligthless-Labs/refinery/issues)
+- Fix bugs and [submit pull requests](https://github.com/Ligthless-Labs/refinery/pulls)
 - Write, clarify, or fix documentation
 - Suggest or add new features
 
 To get started with development:
 
 ```sh
-git clone https://github.com/Bande-a-Bonnot/converge-refinery.git
-cd converge-refinery
+git clone https://github.com/Ligthless-Labs/refinery.git
+cd refinery
 cargo test --workspace
 ```

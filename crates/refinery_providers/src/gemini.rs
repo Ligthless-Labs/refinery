@@ -2,16 +2,16 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use converge_core::ModelProvider;
-use converge_core::error::ProviderError;
-use converge_core::types::{Message, ModelId};
+use refinery_core::ModelProvider;
+use refinery_core::error::ProviderError;
+use refinery_core::types::{Message, ModelId};
 
 use crate::credential::{self, Credential};
 use crate::process;
 
 /// Gemini CLI provider adapter.
 ///
-/// Invokes: `gemini --output-format json --model gemini-2.5-pro --sandbox --approval-mode plan --allowed-tools "" -- "PROMPT"`
+/// Invokes: `gemini --output-format json --model gemini-3.1-pro-preview --sandbox --approval-mode plan --allowed-tools "" -- "PROMPT"`
 /// System prompt via: `GEMINI_SYSTEM_MD` env var
 ///
 /// Supports: `GEMINI_API_KEY` (Google AI Studio) or `GOOGLE_API_KEY` (Vertex AI express mode).
@@ -107,10 +107,10 @@ mod tests {
     #[test]
     fn build_args_contains_required_flags() {
         let provider = GeminiProvider {
-            model_id: ModelId::new("gemini-2.5-pro"),
+            model_id: ModelId::new("gemini-3.1-pro-preview"),
             binary_path: PathBuf::from("/usr/local/bin/gemini"),
             credential: test_credential(),
-            model_name: "gemini-2.5-pro".to_string(),
+            model_name: "gemini-3.1-pro-preview".to_string(),
             timeout: Duration::from_secs(120),
         };
 

@@ -2,7 +2,7 @@
 title: "Graceful degradation and multi-reviewer triage patterns"
 category: runtime-errors
 tags: [graceful-degradation, code-review, triage, error-handling, serde, rustfmt]
-module: converge_core
+module: refinery_core
 symptom: "Models dropping mid-run causes hard failure; multiple reviewers produce duplicate findings"
 root_cause: "No fallback for partial failure; no systematic triage process for review comments"
 date: 2026-02-12
@@ -30,7 +30,7 @@ In a multi-round consensus run, a model that succeeded in round 1 may fail in ro
 
 When `InsufficientModels` fires after round 1, the engine has at least one completed round of proposals, evaluations, and refinements. Instead of returning `Err`, it returns `Ok` with the best answer from the last successful round.
 
-From `crates/converge_core/src/engine.rs` (the `Engine::run` loop):
+From `crates/refinery_core/src/engine.rs` (the `Engine::run` loop):
 
 ```rust
 loop {

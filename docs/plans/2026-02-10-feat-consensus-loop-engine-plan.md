@@ -77,8 +77,8 @@ The plan used a verbose `--disallowedTools` blocklist. The [`--tools ""`](https:
 **[REVIEW FIX] `unsafe_code = "forbid"` vs `setsid` via `pre_exec`.**
 The plan sets `unsafe_code = "forbid"` in workspace lints but requires `pre_exec` for `setsid` process group management, which is an unsafe function. **Decision: defer `setsid` to v0.1. `kill_on_drop(true)` is sufficient for v0 subprocess cleanup. Change lint to `deny` for future flexibility.**
 
-**[REVIEW FIX] ProviderError must live in converge_core.**
-If `ProviderError` lives in `converge_providers`, then `converge_core`'s `ConvergeError::PhaseFailure` can't reference it without a circular dependency. `ProviderError` is defined in `converge_core` (as part of the provider trait contract) and implemented by providers.
+**[REVIEW FIX] ProviderError must live in refinery_core.**
+If `ProviderError` lives in `refinery_providers`, then `refinery_core`'s `ConvergeError::PhaseFailure` can't reference it without a circular dependency. `ProviderError` is defined in `refinery_core` (as part of the provider trait contract) and implemented by providers.
 
 ### Design Simplifications (v0 scope reduction)
 
@@ -152,7 +152,7 @@ converge-refinery/
 ├── Cargo.toml                      # Workspace root
 ├── MODULE.bazel                    # Bazel config (CLI build)
 ├── crates/
-│   ├── converge_core/              # Library crate
+│   ├── refinery_core/              # Library crate
 │   │   └── src/
 │   │       ├── lib.rs              # Re-exports, ModelProvider trait, ClosingStrategy trait
 │   │       ├── types.rs            # All domain types: Message, Role, Content, Score, Ranking, etc.
@@ -166,14 +166,14 @@ converge-refinery/
 │   │       ├── strategy.rs         # ClosingStrategy trait + VoteThreshold impl
 │   │       ├── prompts.rs          # Prompt templates (review, score, rank, refine)
 │   │       └── error.rs            # ConvergeError + ProviderError [REVIEW FIX: both in core]
-│   ├── converge_providers/         # Provider backend crate
+│   ├── refinery_providers/         # Provider backend crate
 │   │   └── src/
 │   │       ├── lib.rs
 │   │       ├── claude.rs           # Claude CLI adapter
 │   │       ├── codex.rs            # Codex CLI adapter
 │   │       ├── gemini.rs           # Gemini CLI adapter
 │   │       └── process.rs          # Subprocess utilities (spawn, timeout, kill, JSON extraction)
-│   └── converge_cli/               # CLI crate (thin wrapper)
+│   └── refinery_cli/               # CLI crate (thin wrapper)
 │       └── src/
 │           └── main.rs             # clap args + engine wiring + tracing output
 ├── docs/
@@ -714,7 +714,7 @@ N=7 is the hard cap. N>5 displays a cost warning before execution.
 **Tasks:**
 - [ ] Initialize git repository
 - [ ] Create Cargo workspace with virtual workspace root, `resolver = "3"` (Rust 2024), `[workspace.package]` for shared metadata, `[workspace.dependencies]` for centralized version management
-- [ ] Create member crates: `crates/converge_core`, `crates/converge_providers` (with feature flags per provider), `crates/converge_cli`
+- [ ] Create member crates: `crates/refinery_core`, `crates/refinery_providers` (with feature flags per provider), `crates/refinery_cli`
 - [ ] Set up `MODULE.bazel` with `rules_rust` and `crate_universe` (reads from `Cargo.toml`/`Cargo.lock`), `BUILD.bazel` per crate
 - [ ] Add `.gitignore` (include `.env`, `*.key`, `*.pem`, `target/`, `.bazel*`)
 - [ ] Update `.env.example` with all three providers' env vars
@@ -728,7 +728,7 @@ N=7 is the hard cap. N>5 displays a cost warning before execution.
 ```toml
 [workspace]
 resolver = "3"
-members = ["crates/converge_core", "crates/converge_providers", "crates/converge_cli"]
+members = ["crates/refinery_core", "crates/refinery_providers", "crates/refinery_cli"]
 
 [workspace.package]
 version = "0.1.0"
@@ -736,8 +736,8 @@ edition = "2024"
 rust-version = "1.85"
 
 [workspace.dependencies]
-converge_core = { path = "crates/converge_core", version = "0.1.0" }
-converge_providers = { path = "crates/converge_providers", version = "0.1.0" }
+refinery_core = { path = "crates/refinery_core", version = "0.1.0" }
+refinery_providers = { path = "crates/refinery_providers", version = "0.1.0" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "sync", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -761,7 +761,7 @@ lto = "thin"
 strip = "symbols"
 ```
 
-**converge_providers feature flags:**
+**refinery_providers feature flags:**
 ```toml
 [features]
 default = ["claude", "codex", "gemini"]
@@ -803,7 +803,7 @@ gemini = []
   ```
   - **Do NOT use `#[from]`** on `PhaseFailure` — the `phase` and `model` context fields cannot be populated by a blanket `From` impl. Use explicit `map_err` at call sites.
   - **Do NOT derive `Serialize`** on `ConvergeError` — error chains are not cleanly serializable. Create a separate `ErrorResponse` struct at the CLI boundary (see Phase 6).
-  - `[REVIEW FIX]` `ProviderError` is defined in `converge_core` (alongside `ConvergeError`) because `ConvergeError::PhaseFailure` references it. Providers implement the trait using `converge_core::ProviderError` variants.
+  - `[REVIEW FIX]` `ProviderError` is defined in `refinery_core` (alongside `ConvergeError`) because `ConvergeError::PhaseFailure` references it. Providers implement the trait using `refinery_core::ProviderError` variants.
 
 **Tests (TDD — Round 2 enhanced):**
 - [ ] `Score::new(0)` fails, `Score::new(1)` succeeds, `Score::new(10)` succeeds, `Score::new(11)` fails
@@ -817,8 +817,8 @@ gemini = []
 - [ ] `ConvergenceStatus` serializes to expected snake_case strings
 
 **Files:**
-- `crates/converge_core/src/types.rs`
-- `crates/converge_core/src/error.rs`
+- `crates/refinery_core/src/types.rs`
+- `crates/refinery_core/src/error.rs`
 
 ### Phase 3: Traits + Mocks
 
@@ -851,7 +851,7 @@ gemini = []
   ```
   Note: `Synthesize` variant removed from v0. The judge model is a strategy configuration concern, not a per-decision concern. Synthesis strategy (v0.1) will return `Converged` after triggering its own LLM call internally.
 - [ ] `VoteThreshold` implementation
-- [ ] Mock providers (in `converge_core::testing` module, `#[cfg(any(test, feature = "testing"))]`):
+- [ ] Mock providers (in `refinery_core::testing` module, `#[cfg(any(test, feature = "testing"))]`):
   - `EchoProvider` — returns fixed text (configurable per call via `Arc<Mutex<VecDeque<String>>>`)
   - `FailingProvider` — fails after N calls (uses `AtomicUsize` counter for thread safety)
   - `DelayProvider` — wraps another provider with artificial delay (works with `tokio::time::pause`)
@@ -874,8 +874,8 @@ gemini = []
 - [ ] Edge: all scores maximum (10) → converges immediately
 
 **Files:**
-- `crates/converge_core/src/lib.rs`
-- `crates/converge_core/src/strategy.rs`
+- `crates/refinery_core/src/lib.rs`
+- `crates/refinery_core/src/strategy.rs`
 
 ### Phase 4: Engine Core (Orchestrator)
 
@@ -920,12 +920,12 @@ gemini = []
 - [ ] `Engine::estimate()` returns correct call counts for N=2,3,5,7 (formula: N²+N per round) `[REVIEW FIX]`
 
 **Files:**
-- `crates/converge_core/src/engine.rs`
-- `crates/converge_core/src/phases/propose.rs`
-- `crates/converge_core/src/phases/evaluate.rs` `[REVIEW FIX]`
-- `crates/converge_core/src/phases/refine.rs`
-- `crates/converge_core/src/phases/close.rs`
-- `crates/converge_core/src/prompts.rs`
+- `crates/refinery_core/src/engine.rs`
+- `crates/refinery_core/src/phases/propose.rs`
+- `crates/refinery_core/src/phases/evaluate.rs` `[REVIEW FIX]`
+- `crates/refinery_core/src/phases/refine.rs`
+- `crates/refinery_core/src/phases/close.rs`
+- `crates/refinery_core/src/prompts.rs`
 
 ### Phase 5: Provider Backends (CLI-based)
 
@@ -975,10 +975,10 @@ gemini = []
 - [ ] Mark with `#[ignore]` for CI
 
 **Files:**
-- `crates/converge_providers/src/process.rs`
-- `crates/converge_providers/src/claude.rs`
-- `crates/converge_providers/src/codex.rs`
-- `crates/converge_providers/src/gemini.rs`
+- `crates/refinery_providers/src/process.rs`
+- `crates/refinery_providers/src/claude.rs`
+- `crates/refinery_providers/src/codex.rs`
+- `crates/refinery_providers/src/gemini.rs`
 - `tests/integration/`
 
 ### Phase 6: CLI
@@ -1050,7 +1050,7 @@ cat question.md | converge -m claude,codex -o json -
 - [ ] `--dry-run` outputs call estimate without executing
 
 **Files:**
-- `crates/converge_cli/src/main.rs`
+- `crates/refinery_cli/src/main.rs`
 
 ### Phase 7: Hardening (v0.1+)
 

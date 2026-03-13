@@ -71,7 +71,7 @@ For each provider, resolve credentials in priority order:
 
 ### Data Model
 
-New file: `crates/converge_providers/src/credential.rs`
+New file: `crates/refinery_providers/src/credential.rs`
 
 ```rust
 use std::fmt;
@@ -111,7 +111,7 @@ impl fmt::Debug for Credential {
 
 #### Research Insights (Architecture + Simplicity)
 
-- **Private fields with accessors** — matches `ModelId(String)` pattern in `converge_core::types`
+- **Private fields with accessors** — matches `ModelId(String)` pattern in `refinery_core::types`
 - **Redacted Debug** — prevents credential leakage through `debug!()` or `{:?}` formatting
 - **`as_env_pair()`** — formalizes the contract with `spawn_cli()`'s `env_vars` parameter
 - **Separate `credential.rs` module** — `process.rs` already has 4 responsibilities; credential resolution is a 5th distinct concern
@@ -342,9 +342,9 @@ Plus 1 wiring test per provider: `new()` calls `resolve_credential` with correct
 
 ## References
 
-- Provider implementations: `crates/converge_providers/src/{claude,codex,gemini}.rs`
-- Process spawning: `crates/converge_providers/src/process.rs:43-64`
-- Error type: `crates/converge_core/src/error.rs:63-64`
+- Provider implementations: `crates/refinery_providers/src/{claude,codex,gemini}.rs`
+- Process spawning: `crates/refinery_providers/src/process.rs:43-64`
+- Error type: `crates/refinery_core/src/error.rs:63-64`
 - README credential docs: `README.md:20-104`
 - Security design (env_clear): plan D7
 

@@ -102,9 +102,9 @@ The codebase already uses nonce-based XML delimiters for `<answer-{nonce}>` and 
 
 ## Implementation
 
-### Phase 1: Core file reading and tag wrapping (`converge_core`)
+### Phase 1: Core file reading and tag wrapping (`refinery_core`)
 
-Add to `crates/converge_core/src/prompts.rs`:
+Add to `crates/refinery_core/src/prompts.rs`:
 
 - `sanitize_for_file_tag(content: &str, nonce: &str) -> String` — escapes `<file-{nonce}` and `</file-{nonce}>` occurrences
 - `wrap_file_content(content: &str, path: &str, nonce: &str) -> String` — wraps content in `<file-{nonce} path="...">...</file-{nonce}>`
@@ -119,9 +119,9 @@ Tests in same file:
 - `assemble_files_only`
 - `assemble_prompt_only`
 
-### Phase 2: CLI argument and file reading (`converge_cli`)
+### Phase 2: CLI argument and file reading (`refinery_cli`)
 
-Modify `crates/converge_cli/src/main.rs`:
+Modify `crates/refinery_cli/src/main.rs`:
 
 - Change `prompt: String` to `prompt: Option<String>` in `Cli` struct
 - Add `#[arg(long = "file", short = 'f')] files: Vec<PathBuf>`
@@ -154,8 +154,8 @@ Tests (integration-level in main.rs or a separate test module):
 ## References
 
 - Brainstorm: `docs/brainstorms/2026-03-11-file-input-support-brainstorm.md`
-- Existing nonce pattern: `crates/converge_core/src/prompts.rs` (lines 8-33)
+- Existing nonce pattern: `crates/refinery_core/src/prompts.rs` (lines 8-33)
 - Existing sanitizers: `sanitize_for_delimiter`, `sanitize_for_review_tag` in same file
-- Existing stdin handling: `crates/converge_cli/src/main.rs` (lines 134-151)
+- Existing stdin handling: `crates/refinery_cli/src/main.rs` (lines 134-151)
 - Security learnings: `docs/solutions/security-issues/prompt-injection-prevention-multi-model.md`
 - CLI flag learnings: `docs/solutions/integration-issues/cli-provider-flags-and-sandboxing.md`

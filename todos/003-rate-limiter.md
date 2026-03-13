@@ -29,5 +29,5 @@ CLI backends (claude, codex, gemini) do not expose rate limit headers (`X-RateLi
 
 ## References
 
-- `crates/converge_core/src/engine.rs` — semaphore-based concurrency control
-- `crates/converge_core/src/types.rs` — `EngineConfig.max_concurrent`
+- `crates/refinery_core/src/engine.rs` — semaphore-based concurrency control
+- `crates/refinery_core/src/types.rs` — `EngineConfig.max_concurrent`

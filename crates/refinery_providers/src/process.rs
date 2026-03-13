@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use converge_core::error::ProviderError;
-use converge_core::types::{Message, ModelId, Role};
+use refinery_core::error::ProviderError;
+use refinery_core::types::{Message, ModelId, Role};
 use tokio::process::Command;
 use tracing::{debug, warn};
 
@@ -198,7 +198,7 @@ pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError>
         })?;
 
     // Strip markdown fences if present (Issue #11184)
-    if let Some(inner) = converge_core::prompts::extract_json(response) {
+    if let Some(inner) = refinery_core::prompts::extract_json(response) {
         Ok(inner.to_string())
     } else {
         Ok(response.to_string())
