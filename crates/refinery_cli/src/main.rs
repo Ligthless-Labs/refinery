@@ -38,9 +38,13 @@ struct Cli {
     #[arg(short = 'r', long, default_value = "5")]
     max_rounds: u32,
 
-    /// Per-call timeout in seconds [default: 120] (range: 1-600)
-    #[arg(long, default_value = "120")]
+    /// Hard wall-clock timeout per call in seconds [default: 1800] (range: 1-7200)
+    #[arg(long, default_value = "1800")]
     timeout: u64,
+
+    /// Idle timeout: max seconds of silence before killing a subprocess [default: 120] (range: 1-600)
+    #[arg(long, default_value = "120")]
+    idle_timeout: u64,
 
     /// Max concurrent subprocess calls [default: 0 = unlimited] (range: 0-50)
     #[arg(long, default_value = "0")]
@@ -227,10 +231,11 @@ async fn main() -> ExitCode {
 
     // Build providers
     let timeout = Duration::from_secs(cli.timeout);
+    let idle_timeout = Duration::from_secs(cli.idle_timeout);
     let mut providers: Vec<Arc<dyn ModelProvider>> = Vec::new();
 
     for model in &cli.models {
-        match build_provider(model, timeout).await {
+        match build_provider(model, timeout, idle_timeout).await {
             Ok(p) => providers.push(p),
             Err(e) => {
                 eprintln!("Failed to initialize provider '{model}': {e}");
@@ -386,19 +391,29 @@ fn read_and_validate_files(
 
 async fn build_provider(
     model: &str,
-    timeout: Duration,
+    max_timeout: Duration,
+    idle_timeout: Duration,
 ) -> Result<Arc<dyn ModelProvider>, Box<dyn std::error::Error>> {
     match model {
         m if m.starts_with("claude") => {
             let model_name = m.strip_prefix("claude-").unwrap_or("opus-4-6");
-            let provider =
-                refinery_providers::claude::ClaudeProvider::new(model_name, timeout).await?;
+            let provider = refinery_providers::claude::ClaudeProvider::new(
+                model_name,
+                max_timeout,
+                idle_timeout,
+            )
+            .await?;
             Ok(Arc::new(provider))
         }
         m if m == "codex" || m.starts_with("codex-") => {
             let model_name = m.strip_prefix("codex-").unwrap_or("gpt-5.4");
-            let provider =
-                refinery_providers::codex::CodexProvider::new(model_name, "xhigh", timeout).await?;
+            let provider = refinery_providers::codex::CodexProvider::new(
+                model_name,
+                "xhigh",
+                max_timeout,
+                idle_timeout,
+            )
+            .await?;
             Ok(Arc::new(provider))
         }
         m if m.starts_with("gemini") => {
@@ -407,8 +422,12 @@ async fn build_provider(
             } else {
                 m
             };
-            let provider =
-                refinery_providers::gemini::GeminiProvider::new(model_name, timeout).await?;
+            let provider = refinery_providers::gemini::GeminiProvider::new(
+                model_name,
+                max_timeout,
+                idle_timeout,
+            )
+            .await?;
             Ok(Arc::new(provider))
         }
         _ => Err(format!(
