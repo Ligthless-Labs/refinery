@@ -11,7 +11,7 @@ use crate::process;
 
 /// Gemini CLI provider adapter.
 ///
-/// Invokes: `gemini --output-format json --model gemini-3.1-pro-preview --sandbox --approval-mode plan --allowed-tools "" -- "PROMPT"`
+/// Invokes: `gemini --output-format json --model gemini-3.1-pro-preview --sandbox --approval-mode plan --prompt "PROMPT"`
 /// System prompt via: `GEMINI_SYSTEM_MD` env var
 ///
 /// Supports: `GEMINI_API_KEY` (Google AI Studio) or `GOOGLE_API_KEY` (Vertex AI express mode).
@@ -54,8 +54,6 @@ impl GeminiProvider {
             "--sandbox".to_string(),
             "--approval-mode".to_string(),
             "plan".to_string(),
-            "--allowed-tools".to_string(),
-            String::new(), // empty string for no tools
             "--prompt".to_string(),
             user_prompt.to_string(),
         ]
@@ -144,8 +142,6 @@ mod tests {
         assert!(args.contains(&"--sandbox".to_string()));
         assert!(args.contains(&"--approval-mode".to_string()));
         assert!(args.contains(&"plan".to_string()));
-        assert!(args.contains(&"--allowed-tools".to_string()));
-        assert!(args.contains(&String::new())); // empty for no tools
         assert!(args.contains(&"--prompt".to_string()));
         assert!(args.contains(&"user prompt".to_string()));
     }
