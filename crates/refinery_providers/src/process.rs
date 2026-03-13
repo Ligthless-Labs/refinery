@@ -236,7 +236,11 @@ pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError>
     }
 }
 
-/// Extract the response text from a Claude JSON envelope.
+/// Extract the response text from Claude's `--json-schema`-constrained output.
+///
+/// Claude is invoked with `--output-format text` and
+/// `--json-schema {"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"]}`,
+/// so the raw stdout is always `{"answer":"..."}`.
 pub fn extract_claude_response(json_text: &str) -> Result<String, ProviderError> {
     let model = ModelId::new("claude");
 
@@ -246,25 +250,13 @@ pub fn extract_claude_response(json_text: &str) -> Result<String, ProviderError>
             message: e.to_string(),
         })?;
 
-    if parsed.get("is_error").and_then(serde_json::Value::as_bool) == Some(true) {
-        let message = parsed
-            .get("result")
-            .and_then(|r| r.as_str())
-            .unwrap_or("unknown error");
-        return Err(ProviderError::ProcessFailed {
-            model,
-            message: message.to_string(),
-            exit_code: None,
-        });
-    }
-
     parsed
-        .get("result")
+        .get("answer")
         .and_then(|r| r.as_str())
         .map(String::from)
         .ok_or_else(|| ProviderError::InvalidJson {
             model,
-            message: "missing 'result' field".to_string(),
+            message: "missing 'answer' field".to_string(),
         })
 }
 
@@ -274,15 +266,14 @@ mod tests {
 
     #[test]
     fn extract_claude_valid() {
-        let json =
-            r#"{"type":"result","result":"Hello world","session_id":"abc","is_error":false}"#;
+        let json = r#"{"answer":"Hello world"}"#;
         let result = extract_claude_response(json).unwrap();
         assert_eq!(result, "Hello world");
     }
 
     #[test]
-    fn extract_claude_error() {
-        let json = r#"{"type":"result","result":"Something went wrong","is_error":true}"#;
+    fn extract_claude_missing_answer() {
+        let json = r#"{"something_else":"value"}"#;
         assert!(extract_claude_response(json).is_err());
     }
 
