@@ -281,6 +281,7 @@ pub struct EngineConfig {
 }
 
 impl EngineConfig {
+    #[allow(clippy::result_large_err)]
     pub fn new(
         models: Vec<ModelId>,
         max_rounds: u32,

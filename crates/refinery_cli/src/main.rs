@@ -332,7 +332,7 @@ async fn main() -> ExitCode {
         match build_provider(model_id, timeout, idle_timeout, progress.clone()).await {
             Ok(p) => providers.push(p),
             Err(e) => {
-                eprintln!("Failed to initialize provider '{}': {e}", model_id);
+                eprintln!("Failed to initialize provider '{model_id}': {e}");
                 return ExitCode::from(4);
             }
         }

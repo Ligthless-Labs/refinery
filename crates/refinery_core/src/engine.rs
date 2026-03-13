@@ -243,7 +243,7 @@ impl Session<'_> {
             self.config.threshold,
             self.config.stability_rounds,
             &previous_scores,
-            self.current_winner.as_ref().map(|id| id.to_string()).as_deref(),
+            self.current_winner.as_ref().map(std::string::ToString::to_string).as_deref(),
             self.stable_rounds,
             false,
         );
