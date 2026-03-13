@@ -327,7 +327,8 @@ async fn main() -> ExitCode {
         Ok((outcome, rounds)) => {
             // Save per-round artifacts if --output-dir is set
             if let Some(ref dir) = cli.output_dir {
-                if let Err(e) = save_round_artifacts(dir, &rounds) {
+                let run_dir = make_run_dir(dir, &cli.prompt);
+                if let Err(e) = save_round_artifacts(&run_dir, &rounds) {
                     eprintln!("Warning: failed to save artifacts: {e}");
                 }
             }
@@ -549,6 +550,81 @@ async fn build_provider(
         )
         .into()),
     }
+}
+
+/// Build a per-run subdirectory inside the base output dir.
+///
+/// Format: `YYYYMMDD-HHMMSS_<prompt-slug>` where the slug is the first
+/// 40 chars of the prompt, lowercased, with non-alphanumeric chars replaced by `-`.
+fn make_run_dir(base: &std::path::Path, prompt: &Option<String>) -> std::path::PathBuf {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    // Convert epoch seconds to UTC date-time components
+    let (y, mo, d, h, mi, s) = epoch_to_utc(secs);
+    let timestamp = format!("{y:04}{mo:02}{d:02}-{h:02}{mi:02}{s:02}");
+    let slug: String = prompt
+        .as_deref()
+        .unwrap_or("no-prompt")
+        .chars()
+        .take(40)
+        .map(|c| {
+            if c.is_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+    base.join(format!("{timestamp}_{slug}"))
+}
+
+/// Convert Unix epoch seconds to (year, month, day, hour, minute, second) in UTC.
+fn epoch_to_utc(epoch: u64) -> (u64, u64, u64, u64, u64, u64) {
+    let s = epoch % 60;
+    let mi = (epoch / 60) % 60;
+    let h = (epoch / 3600) % 24;
+    let mut days = epoch / 86400;
+    let mut y = 1970;
+    loop {
+        let days_in_year = if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
+            366
+        } else {
+            365
+        };
+        if days < days_in_year {
+            break;
+        }
+        days -= days_in_year;
+        y += 1;
+    }
+    let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+    let month_days = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    let mut mo = 0;
+    for &md in &month_days {
+        if days < md {
+            break;
+        }
+        days -= md;
+        mo += 1;
+    }
+    (y, mo + 1, days + 1, h, mi, s)
 }
 
 fn save_round_artifacts(
