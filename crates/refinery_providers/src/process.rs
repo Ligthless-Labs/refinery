@@ -246,9 +246,76 @@ pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError>
     }
 }
 
+/// Extract the response from Claude's `--output-format json` + `--json-schema` output.
+///
+/// The CLI emits a JSON stream (one object per line). The final event has
+/// `"type":"result"` and carries `structured_output.answer` (the `result`
+/// field itself is empty when `--json-schema` is used).
+pub fn extract_claude_response(json_stream: &str) -> Result<String, ProviderError> {
+    let model = ModelId::new("claude");
+
+    // The output is a JSON array; parse it
+    let parsed: serde_json::Value =
+        serde_json::from_str(json_stream).map_err(|e| ProviderError::InvalidJson {
+            model: model.clone(),
+            message: e.to_string(),
+        })?;
+
+    let events = parsed
+        .as_array()
+        .ok_or_else(|| ProviderError::InvalidJson {
+            model: model.clone(),
+            message: "expected JSON array".to_string(),
+        })?;
+
+    // Find the "type":"result" event and extract structured_output.answer
+    for event in events.iter().rev() {
+        if event.get("type").and_then(|t| t.as_str()) == Some("result") {
+            if let Some(answer) = event
+                .get("structured_output")
+                .and_then(|so| so.get("answer"))
+                .and_then(|a| a.as_str())
+            {
+                return Ok(answer.to_string());
+            }
+            // Fallback to result field if non-empty
+            if let Some(result) = event.get("result").and_then(|r| r.as_str()) {
+                if !result.is_empty() {
+                    return Ok(result.to_string());
+                }
+            }
+        }
+    }
+
+    Err(ProviderError::InvalidJson {
+        model,
+        message: "no result event with structured_output found in JSON stream".to_string(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extract_claude_structured_output() {
+        let json = r#"[{"type":"system","subtype":"init"},{"type":"assistant","message":{"content":[{"type":"text","text":"Hello!"}]}},{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"answer":"Hello! How can I help you today?"}}]"#;
+        let result = extract_claude_response(json).unwrap();
+        assert_eq!(result, "Hello! How can I help you today?");
+    }
+
+    #[test]
+    fn extract_claude_fallback_to_result() {
+        let json = r#"[{"type":"result","subtype":"success","result":"Plain text fallback","structured_output":null}]"#;
+        let result = extract_claude_response(json).unwrap();
+        assert_eq!(result, "Plain text fallback");
+    }
+
+    #[test]
+    fn extract_claude_no_result_event() {
+        let json = r#"[{"type":"system","subtype":"init"},{"type":"assistant","message":{}}]"#;
+        assert!(extract_claude_response(json).is_err());
+    }
 
     #[test]
     fn extract_codex_valid() {

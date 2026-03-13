@@ -11,7 +11,11 @@ use crate::process;
 
 /// Claude CLI provider adapter.
 ///
-/// Invokes: `claude -p --output-format text --tools "" --max-turns 1 --model claude-opus-4-6 --append-system-prompt "SYSTEM" -- "PROMPT"`
+/// Invokes: `claude -p --output-format json --json-schema {...} --max-turns 10 --effort high --model claude-opus-4-6 --append-system-prompt "SYSTEM" -- "PROMPT"`
+///
+/// With `--json-schema`, Claude uses a `StructuredOutput` tool call internally.
+/// The final `type: "result"` event carries the answer in `structured_output.answer`
+/// (the `result` field is empty).
 ///
 /// Supports: `ANTHROPIC_API_KEY` (pay-per-use) or `CLAUDE_CODE_OAUTH_TOKEN` (Pro/Max subscription).
 /// When neither is set, falls back to the Claude CLI's own stored credentials (`~/.claude.json`).
@@ -50,11 +54,14 @@ impl ClaudeProvider {
         vec![
             "-p".to_string(),
             "--output-format".to_string(),
-            "text".to_string(),
-            "--tools".to_string(),
-            String::new(), // empty string disables all tools
+            "json".to_string(),
+            "--json-schema".to_string(),
+            r#"{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}"#
+                .to_string(),
             "--max-turns".to_string(),
-            "1".to_string(),
+            "10".to_string(), // structured output requires multiple turns (hook → StructuredOutput tool)
+            "--effort".to_string(),
+            "high".to_string(),
             "--model".to_string(),
             format!("claude-{}", self.model_name),
             "--append-system-prompt".to_string(),
@@ -83,14 +90,16 @@ impl ModelProvider for ClaudeProvider {
             env_vars.push(("HOME", h.as_str()));
         }
 
-        process::spawn_cli(
+        let output = process::spawn_cli(
             &self.binary_path,
             &args_refs,
             &env_vars,
             self.timeout,
             &self.model_id,
         )
-        .await
+        .await?;
+
+        process::extract_claude_response(&output)
     }
 
     fn model_id(&self) -> &ModelId {
@@ -125,11 +134,12 @@ mod tests {
 
         assert!(args.contains(&"-p".to_string()));
         assert!(args.contains(&"--output-format".to_string()));
-        assert!(args.contains(&"text".to_string()));
-        assert!(args.contains(&"--tools".to_string()));
-        assert!(args.contains(&String::new())); // empty string for --tools
+        assert!(args.contains(&"json".to_string()));
+        assert!(args.contains(&"--json-schema".to_string()));
+        assert!(args.contains(&"--effort".to_string()));
+        assert!(args.contains(&"high".to_string()));
         assert!(args.contains(&"--max-turns".to_string()));
-        assert!(args.contains(&"1".to_string()));
+        assert!(args.contains(&"10".to_string()));
         assert!(args.contains(&"--".to_string())); // sentinel
         assert!(args.contains(&"user prompt".to_string()));
     }
