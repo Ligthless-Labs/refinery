@@ -309,9 +309,7 @@ async fn main() -> ExitCode {
                         ..
                     } => {
                         if converged {
-                            let w = winner
-                                .map(|m| m.to_string())
-                                .unwrap_or_else(|| "?".to_string());
+                            let w = winner.map_or_else(|| "?".to_string(), |m| m.to_string());
                             eprintln!(
                                 "  \x1b[32m→ Converged!\x1b[0m Winner: {w} ({best_score:.1} ≥ {threshold:.1}, stable {stable_rounds}/{required_stable})"
                             );
