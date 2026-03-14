@@ -155,6 +155,339 @@ refinery "prompt" --models claude-code,codex-cli --debug    # raw CLI invocation
 | 3 | Insufficient models |
 | 4 | Config or input error |
 
+
+## CLI Examples
+
+<details>
+  <summary>### The Hitchhiker's Guide to the Galaxy</summary>
+  ```
+  $ refinery --max-rounds 5 --output-format json --models claude-code,codex-cli,gemini-cli --timeout 1800 --idle-timeout 480 --output-dir out "What's the answer to life, the Universe, and everything?"
+  
+    Round 1/5
+    ── propose ──
+      ✓ codex-cli/gpt-5.4 proposed (1 words) — "42."
+      ✓ gemini-cli/gemini-3.1-pro-preview proposed (56 words) — "The answer to life, the Universe, and everything is **42**, ..."
+      ✓ claude-code/claude-opus-4-6 proposed (72 words) — "42 — the answer computed by the supercomputer Deep Thought i..."
+    ── evaluate ──
+      ✓ gemini-cli/gemini-3.1-pro-preview → codex-cli/gpt-5.4: 8.0 — "The answer correctly identifies the iconic response to the p..."
+      ✓ codex-cli/gpt-5.4 → gemini-cli/gemini-3.1-pro-preview: 9.0 — "This is a strong answer: accurate, clear, and appropriately ..."
+      ✓ claude-code/claude-opus-4-6 → codex-cli/gpt-5.4: 8.0 — "The answer is correct and appropriately succinct. '42' is th..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → claude-code/claude-opus-4-6: 10.0 — "An excellent, comprehensive answer that not only provides th..."
+      ✓ codex-cli/gpt-5.4 → claude-code/claude-opus-4-6: 9.0 — "This is a strong answer: accurate, well-written, and appropr..."
+      ✓ claude-code/claude-opus-4-6 → gemini-cli/gemini-3.1-pro-preview: 8.0 — "This is a solid, accurate, and well-written answer. It corre..."
+    → Not converged (9.5/8.0, stable 1/2)
+                                         R1  
+      claude-code/claude-opus-4-6         9.5 ★
+      gemini-cli/gemini-3.1-pro-preview   8.5
+      codex-cli/gpt-5.4                   8.0
+  
+    Round 2/5
+    ── propose ──
+      ✓ codex-cli/gpt-5.4 proposed (11 words) — "42, according to Douglas Adams' *The Hitchhiker's Guide to t..."
+      ✓ claude-code/claude-opus-4-6 proposed (100 words) — "**42** — the answer computed by the supercomputer Deep Thoug..."
+      ✓ gemini-cli/gemini-3.1-pro-preview proposed (188 words) — "The answer to life, the Universe, and everything is **42**."
+    ── evaluate ──
+      ✓ claude-code/claude-opus-4-6 → codex-cli/gpt-5.4: 8.0 — "This is a correct, well-attributed, and concise answer. It i..."
+      ✓ codex-cli/gpt-5.4 → claude-code/claude-opus-4-6: 9.0 — "This is a strong answer: accurate, well-written, and appropr..."
+      ✓ codex-cli/gpt-5.4 → gemini-cli/gemini-3.1-pro-preview: 9.0 — "This is a strong answer: correct, clear, and engaging. It an..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → codex-cli/gpt-5.4: 10.0 — "The answer perfectly addresses the classic pop-culture trivi..."
+      ✓ claude-code/claude-opus-4-6 → gemini-cli/gemini-3.1-pro-preview: 9.0 — "This is an excellent, accurate, and well-structured answer t..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → claude-code/claude-opus-4-6: 10.0 — "An exceptionally well-crafted response that not only provide..."
+    → Converged! Winner: claude-code/claude-opus-4-6 (9.5 ≥ 8.0, stable 2/2)
+                                         R1    R2  
+      claude-code/claude-opus-4-6         9.5   9.5 ★
+      codex-cli/gpt-5.4                   8.0   9.0
+      gemini-cli/gemini-3.1-pro-preview   8.5   9.0
+  {
+    "status": "converged",
+    "winner": {
+      "model_id": "claude-code/claude-opus-4-6",
+      "answer": "**42** — the answer computed by the supercomputer Deep Thought in Douglas Adams' *The Hitchhiker's Guide to the Galaxy* (1979). Deep Thought took 7.5 million years to arrive at this answer, only to reveal that the real problem was that nobody knew what the actual Question was. A larger computer — the Earth — was then built to find the Question, but was unfortunately demolished by the Vogons five minutes before completing its 10-million-year program.\n\nThe joke, of course, is that a precise answer without a meaningful question is useless — a wry commentary on humanity's search for cosmic meaning."
+    },
+    "final_round": 2,
+    "strategy": "vote-threshold",
+    "all_answers": [
+      {
+        "model_id": "codex-cli/gpt-5.4",
+        "answer": "42, according to Douglas Adams' *The Hitchhiker's Guide to the Galaxy*.",
+        "mean_score": 9.0
+      },
+      {
+        "model_id": "claude-code/claude-opus-4-6",
+        "answer": "**42** — the answer computed by the supercomputer Deep Thought in Douglas Adams' *The Hitchhiker's Guide to the Galaxy* (1979). Deep Thought took 7.5 million years to arrive at this answer, only to reveal that the real problem was that nobody knew what the actual Question was. A larger computer — the Earth — was then built to find the Question, but was unfortunately demolished by the Vogons five minutes before completing its 10-million-year program.\n\nThe joke, of course, is that a precise answer without a meaningful question is useless — a wry commentary on humanity's search for cosmic meaning.",
+        "mean_score": 9.5
+      },
+      {
+        "model_id": "gemini-cli/gemini-3.1-pro-preview",
+        "answer": "The answer to life, the Universe, and everything is **42**.\n\nThis famous answer originates from Douglas Adams' classic science fiction comedy series, *The Hitchhiker's Guide to the Galaxy*. \n\nIn the story, a group of hyper-intelligent, pan-dimensional beings build a massive supercomputer named Deep Thought to calculate the answer to the Ultimate Question of Life, the Universe, and Everything. After pondering the problem for 7.5 million years, Deep Thought finally reveals the answer to be 42.\n\nHowever, the computer points out that the answer is ultimately meaningless to them because the creators never actually knew what the \"Ultimate Question\" was in the first place. To figure out the specific question that yields the answer 42, an even larger and more complex computer is built—a planet called Earth. Tragically, Earth is destroyed by the Vogons to make way for a hyperspace bypass just five minutes before its ten-million-year calculation is set to complete.\n\nSince the series' publication, the number \"42\" has transcended its origins to become a beloved staple of geek culture and science fiction trivia, frequently appearing as an Easter egg in software, video games, and across the internet.",
+        "mean_score": 9.0
+      }
+    ],
+    "metadata": {
+      "total_rounds": 2,
+      "total_calls": 18,
+      "elapsed_ms": 80667,
+      "models_dropped": []
+    }
+  }
+  ```
+</details>
+
+<details>
+  <summary>### The Car Wash Test</summary>
+  
+  ```
+  $ refinery --max-rounds 5 --output-format json --models claude-code,codex-cli,gemini-cli --timeout 1800 --idle-timeout 480 --output-dir out "The car wash is only 100m away from my house, should I walk or drive?" --dry-run
+ Dry run estimate:
+   Models: 3
+   Calls per round: 9
+   Max rounds: 5
+   Total calls (max): 45
+  ```
+  
+  ```
+  $ refinery --max-rounds 5 --output-format json --models claude-code,codex-cli,gemini-cli --timeout 1800 --idle-timeout 480 --output-dir out "The car wash is only 100m away from my house, should I walk or drive?"
+  
+    Round 1/5
+    ── propose ──
+      ✓ codex-cli/gpt-5.4 proposed (42 words) — "Walk."
+      ✓ gemini-cli/gemini-3.1-pro-preview proposed (32 words) — "You should definitely drive. "
+      ✓ claude-code/claude-opus-4-6 proposed (59 words) — "Walk. 100 meters is roughly a one-minute walk. Driving such ..."
+    ── evaluate ──
+      ✓ codex-cli/gpt-5.4 → claude-code/claude-opus-4-6: 5.0 — "The answer is clear and reasonable on the narrow assumption ..."
+      ✓ claude-code/claude-opus-4-6 → codex-cli/gpt-5.4: 4.0 — "The answer is well-written and concise but misses the most o..."
+      ✓ codex-cli/gpt-5.4 → gemini-cli/gemini-3.1-pro-preview: 8.0 — "The answer is logically correct and directly addresses the p..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → codex-cli/gpt-5.4: 2.0 — "The answer provides excellent generic advice for traveling a..."
+      ✓ claude-code/claude-opus-4-6 → gemini-cli/gemini-3.1-pro-preview: 9.0 — "This is a strong, clever answer that correctly identifies th..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → claude-code/claude-opus-4-6: 2.0 — "The model provides excellent advice for a generic 100-meter ..."
+    → Not converged (8.5/8.0, stable 1/2)
+                                         R1  
+      gemini-cli/gemini-3.1-pro-preview   8.5 ★
+      claude-code/claude-opus-4-6         3.5
+      codex-cli/gpt-5.4                   3.0
+  
+    Round 2/5
+    ── propose ──
+      ✓ claude-code/claude-opus-4-6 proposed (52 words) — "Drive. You're going to a car wash, so you need the car there..."
+      ✓ codex-cli/gpt-5.4 proposed (39 words) — "If you’re going there to wash your car, drive. The distance ..."
+      ✓ gemini-cli/gemini-3.1-pro-preview proposed (125 words) — "You should definitely **drive**—at least initially! "
+    ── evaluate ──
+      ✓ codex-cli/gpt-5.4 → claude-code/claude-opus-4-6: 8.0 — "This is a strong, practical answer that matches the most lik..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → codex-cli/gpt-5.4: 10.0 — "The answer perfectly addresses the core trick of the questio..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → claude-code/claude-opus-4-6: 9.0 — "The answer perfectly nails the trick of the question by poin..."
+      ✓ codex-cli/gpt-5.4 → gemini-cli/gemini-3.1-pro-preview: 8.0 — "This is a strong, practical answer that addresses the obviou..."
+      ✓ claude-code/claude-opus-4-6 → gemini-cli/gemini-3.1-pro-preview: 9.0 — "This is a strong answer that correctly identifies the implic..."
+      ✓ claude-code/claude-opus-4-6 → codex-cli/gpt-5.4: 8.0 — "This is a strong, practical answer that correctly identifies..."
+    → Not converged (9.0/8.0, stable 1/2)
+                                         R1    R2  
+      codex-cli/gpt-5.4                   3.0   9.0 ★
+      claude-code/claude-opus-4-6         3.5   8.5
+      gemini-cli/gemini-3.1-pro-preview   8.5   8.5
+  
+    Round 3/5
+    ── propose ──
+      ✓ codex-cli/gpt-5.4 proposed (53 words) — "If you’re using the car wash, drive. The car has to be there..."
+      ✓ claude-code/claude-opus-4-6 proposed (97 words) — "Drive. You're going to a car wash — you need the car there t..."
+      ✓ gemini-cli/gemini-3.1-pro-preview proposed (176 words) — "You should definitely **drive**—at least initially! "
+    ── evaluate ──
+      ✓ gemini-cli/gemini-3.1-pro-preview → claude-code/claude-opus-4-6: 10.0 — "This is an excellent response that correctly identifies the ..."
+      ✓ codex-cli/gpt-5.4 → claude-code/claude-opus-4-6: 8.0 — "This is a strong answer for a simple question. It is logical..."
+      ✓ codex-cli/gpt-5.4 → gemini-cli/gemini-3.1-pro-preview: 8.0 — "This is a strong, practical answer that correctly resolves t..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → codex-cli/gpt-5.4: 10.0 — "The answer is excellent. It immediately catches the logical ..."
+      ✓ claude-code/claude-opus-4-6 → gemini-cli/gemini-3.1-pro-preview: 9.0 — "This is an excellent answer that nails the key insight of th..."
+      ✓ claude-code/claude-opus-4-6 → codex-cli/gpt-5.4: 8.0 — "This is a strong, practical answer that nails the central in..."
+    → Converged! Winner: codex-cli/gpt-5.4 (9.0 ≥ 8.0, stable 2/2)
+                                         R1    R2    R3  
+      claude-code/claude-opus-4-6         3.5   8.5   9.0
+      codex-cli/gpt-5.4                   3.0   9.0   9.0 ★
+      gemini-cli/gemini-3.1-pro-preview   8.5   8.5   8.5
+  {
+    "status": "converged",
+    "winner": {
+      "model_id": "codex-cli/gpt-5.4",
+      "answer": "If you’re using the car wash, drive. The car has to be there, and at 100m the trip is trivial.\n\nA sensible option is: drive it there, then walk home or back while it’s being cleaned if that’s allowed.\n\nIf you only mean going over to ask a question or check prices, walk."
+    },
+    "final_round": 3,
+    "strategy": "vote-threshold",
+    "all_answers": [
+      {
+        "model_id": "codex-cli/gpt-5.4",
+        "answer": "If you’re using the car wash, drive. The car has to be there, and at 100m the trip is trivial.\n\nA sensible option is: drive it there, then walk home or back while it’s being cleaned if that’s allowed.\n\nIf you only mean going over to ask a question or check prices, walk.",
+        "mean_score": 9.0
+      },
+      {
+        "model_id": "claude-code/claude-opus-4-6",
+        "answer": "Drive. You're going to a car wash — you need the car there to get it washed. Walking 100 meters to a car wash without your car defeats the entire purpose of the trip.\n\nThe short distance is actually a bonus: minimal fuel use, and you're there in seconds.\n\nThe only scenario where walking would make sense is if you're not actually getting the car washed — e.g., you're going to ask about pricing, buy a gift card, or the wash offers a pickup/drop-off service. But if the goal is to wash your car, drive it there.",
+        "mean_score": 9.0
+      },
+      {
+        "model_id": "gemini-cli/gemini-3.1-pro-preview",
+        "answer": "You should definitely **drive**—at least initially! \n\nWhile 100 meters is a very short distance, it is going to be incredibly difficult to get your car washed if you leave it at home. \n\nHow you handle the rest of the trip, however, depends on what kind of car wash it is:\n\n*   **Full-service or hand-wash (drop-off):** You have the perfect setup for a hybrid approach. **Drive** the car to the wash and drop it off, **walk** the 100m back home to relax or get some chores done while they work, then **walk** back to pick it up and drive your clean car home.\n*   **Automatic or drive-through:** You'll just need to **drive**. Pull through the wash, dry it off, and make the very short drive back to your driveway.\n*   **Self-serve bay:** **Drive** over, wash it yourself, and drive back. \n\n*(Of course, if you're just walking over to buy a snack at the attached convenience store, or you're planning to wash your bicycle or the dog, then leave the car in the driveway and enjoy the walk!)*",
+        "mean_score": 8.5
+      }
+    ],
+    "metadata": {
+      "total_rounds": 3,
+      "total_calls": 27,
+      "elapsed_ms": 128612,
+      "models_dropped": []
+    }
+  }
+  ```
+  
+  ```
+  $ refinery --max-rounds 5 --output-format json --models claude-code,codex-cli,gemini-cli --timeout 1800 --idle-timeout 480 --output-dir out "The car wash is only 100m away from my house, should I walk or drive?"
+  
+    Round 1/5
+    ── propose ──
+      ✓ claude-code/claude-opus-4-6 proposed (70 words) — "Walk. 100 meters is roughly a one-minute walk. Driving such ..."
+      ✓ gemini-cli/gemini-3.1-pro-preview proposed (57 words) — "You should definitely **drive**—assuming you are going there..."
+      ✓ codex-cli/gpt-5.4 proposed (9 words) — "Drive. The car wash needs the car there too."
+    ── evaluate ──
+      ✓ codex-cli/gpt-5.4 → gemini-cli/gemini-3.1-pro-preview: 8.0 — "This is a solid answer that correctly interprets the most li..."
+      ✓ codex-cli/gpt-5.4 → claude-code/claude-opus-4-6: 6.0 — "The answer is clear and practical, but its main recommendati..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → codex-cli/gpt-5.4: 9.0 — "The model successfully navigates the trick question by point..."
+      ✓ claude-code/claude-opus-4-6 → codex-cli/gpt-5.4: 9.0 — "This is an excellent, pragmatic answer that identifies the k..."
+      ✓ claude-code/claude-opus-4-6 → gemini-cli/gemini-3.1-pro-preview: 8.0 — "This is a clever, practical answer that nails the most impor..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → claude-code/claude-opus-4-6: 4.0 — "The answer provides standard, logical advice for a generic 1..."
+    → Not converged (9.0/8.0, stable 1/2)
+                                         R1  
+      codex-cli/gpt-5.4                   9.0 ★
+      gemini-cli/gemini-3.1-pro-preview   8.0
+      claude-code/claude-opus-4-6         5.0
+  
+    Round 2/5
+    ── propose ──
+      ✓ claude-code/claude-opus-4-6 proposed (26 words) — "Drive. You're going to a car wash — you need your car there...."
+      ✓ codex-cli/gpt-5.4 proposed (28 words) — "Drive. It’s only 100m, but the car wash still needs the car...."
+      ✓ gemini-cli/gemini-3.1-pro-preview proposed (182 words) — "Whether you should walk or drive depends entirely on **why**..."
+    ── evaluate ──
+      ✓ codex-cli/gpt-5.4 → claude-code/claude-opus-4-6: 8.0 — "This is a mostly correct answer that addresses the main logi..."
+      ✓ codex-cli/gpt-5.4 → gemini-cli/gemini-3.1-pro-preview: 8.0 — "This is a solid, sensible answer that handles the ambiguity ..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → codex-cli/gpt-5.4: 10.0 — "The answer perfectly handles the trick question by pointing ..."
+      ✓ claude-code/claude-opus-4-6 → codex-cli/gpt-5.4: 8.0 — "This is a strong, practical answer that nails the key insigh..."
+      ✓ claude-code/claude-opus-4-6 → gemini-cli/gemini-3.1-pro-preview: 9.0 — "This is a strong, well-reasoned answer that nails the centra..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → claude-code/claude-opus-4-6: 9.0 — "The answer perfectly captures the logical catch of the user'..."
+    → Converged! Winner: codex-cli/gpt-5.4 (9.0 ≥ 8.0, stable 2/2)
+                                         R1    R2  
+      codex-cli/gpt-5.4                   9.0   9.0 ★
+      gemini-cli/gemini-3.1-pro-preview   8.0   8.5
+      claude-code/claude-opus-4-6         5.0   8.5
+  {
+    "status": "converged",
+    "winner": {
+      "model_id": "codex-cli/gpt-5.4",
+      "answer": "Drive. It’s only 100m, but the car wash still needs the car. If you already left it there and you’re just going to pick it up, then walk."
+    },
+    "final_round": 2,
+    "strategy": "vote-threshold",
+    "all_answers": [
+      {
+        "model_id": "gemini-cli/gemini-3.1-pro-preview",
+        "answer": "Whether you should walk or drive depends entirely on **why** you are going to the car wash. \n\nHere is a breakdown of your best options:\n\n**1. If you are going to get your car washed:**\nYou should **drive**. Even though 100m is only about a 1 to 2-minute walk, you will need to bring the car with you to actually get it washed!\n\n**2. If you are dropping your car off to be detailed:**\nYou have the perfect setup. You should **drive** your car there to drop it off, and then enjoy the quick 1-minute **walk** back home while you wait for the service to be completed. \n\n**3. If you are going for any other reason:**\nYou should **walk**. If you are just heading there to buy a snack from their convenience store, use an ATM, ask a question, or apply for a job, a 100m distance (about 330 feet) is incredibly short. Walking will only take a minute or two, whereas driving would probably take longer just to start the engine, pull out of your driveway, and find a parking spot.",
+        "mean_score": 8.5
+      },
+      {
+        "model_id": "codex-cli/gpt-5.4",
+        "answer": "Drive. It’s only 100m, but the car wash still needs the car. If you already left it there and you’re just going to pick it up, then walk.",
+        "mean_score": 9.0
+      },
+      {
+        "model_id": "claude-code/claude-opus-4-6",
+        "answer": "Drive. You're going to a car wash — you need your car there. Walking 100 meters to a car wash without your car defeats the purpose.",
+        "mean_score": 8.5
+      }
+    ],
+    "metadata": {
+      "total_rounds": 2,
+      "total_calls": 18,
+      "elapsed_ms": 84181,
+      "models_dropped": []
+    }
+  }
+  ```
+</details>
+
+
+<details>
+  <summary>### The Car Wash Test</summary>
+  ```
+  $refinery --max-rounds 5 --output-format json --models claude-code,codex-cli,gemini-cli --timeout 1800 --idle-timeout 480 --output-dir out "What's the answer to life, the Universe, and everything?"
+  
+    Round 1/5
+    ── propose ──
+      ✓ codex-cli/gpt-5.4 proposed (1 words) — "42."
+      ✓ gemini-cli/gemini-3.1-pro-preview proposed (56 words) — "The answer to life, the Universe, and everything is **42**, ..."
+      ✓ claude-code/claude-opus-4-6 proposed (72 words) — "42 — the answer computed by the supercomputer Deep Thought i..."
+    ── evaluate ──
+      ✓ gemini-cli/gemini-3.1-pro-preview → codex-cli/gpt-5.4: 8.0 — "The answer correctly identifies the iconic response to the p..."
+      ✓ codex-cli/gpt-5.4 → gemini-cli/gemini-3.1-pro-preview: 9.0 — "This is a strong answer: accurate, clear, and appropriately ..."
+      ✓ claude-code/claude-opus-4-6 → codex-cli/gpt-5.4: 8.0 — "The answer is correct and appropriately succinct. '42' is th..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → claude-code/claude-opus-4-6: 10.0 — "An excellent, comprehensive answer that not only provides th..."
+      ✓ codex-cli/gpt-5.4 → claude-code/claude-opus-4-6: 9.0 — "This is a strong answer: accurate, well-written, and appropr..."
+      ✓ claude-code/claude-opus-4-6 → gemini-cli/gemini-3.1-pro-preview: 8.0 — "This is a solid, accurate, and well-written answer. It corre..."
+    → Not converged (9.5/8.0, stable 1/2)
+                                         R1  
+      claude-code/claude-opus-4-6         9.5 ★
+      gemini-cli/gemini-3.1-pro-preview   8.5
+      codex-cli/gpt-5.4                   8.0
+  
+    Round 2/5
+    ── propose ──
+      ✓ codex-cli/gpt-5.4 proposed (11 words) — "42, according to Douglas Adams' *The Hitchhiker's Guide to t..."
+      ✓ claude-code/claude-opus-4-6 proposed (100 words) — "**42** — the answer computed by the supercomputer Deep Thoug..."
+      ✓ gemini-cli/gemini-3.1-pro-preview proposed (188 words) — "The answer to life, the Universe, and everything is **42**."
+    ── evaluate ──
+      ✓ claude-code/claude-opus-4-6 → codex-cli/gpt-5.4: 8.0 — "This is a correct, well-attributed, and concise answer. It i..."
+      ✓ codex-cli/gpt-5.4 → claude-code/claude-opus-4-6: 9.0 — "This is a strong answer: accurate, well-written, and appropr..."
+      ✓ codex-cli/gpt-5.4 → gemini-cli/gemini-3.1-pro-preview: 9.0 — "This is a strong answer: correct, clear, and engaging. It an..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → codex-cli/gpt-5.4: 10.0 — "The answer perfectly addresses the classic pop-culture trivi..."
+      ✓ claude-code/claude-opus-4-6 → gemini-cli/gemini-3.1-pro-preview: 9.0 — "This is an excellent, accurate, and well-structured answer t..."
+      ✓ gemini-cli/gemini-3.1-pro-preview → claude-code/claude-opus-4-6: 10.0 — "An exceptionally well-crafted response that not only provide..."
+    → Converged! Winner: claude-code/claude-opus-4-6 (9.5 ≥ 8.0, stable 2/2)
+                                         R1    R2  
+      claude-code/claude-opus-4-6         9.5   9.5 ★
+      codex-cli/gpt-5.4                   8.0   9.0
+      gemini-cli/gemini-3.1-pro-preview   8.5   9.0
+  {
+    "status": "converged",
+    "winner": {
+      "model_id": "claude-code/claude-opus-4-6",
+      "answer": "**42** — the answer computed by the supercomputer Deep Thought in Douglas Adams' *The Hitchhiker's Guide to the Galaxy* (1979). Deep Thought took 7.5 million years to arrive at this answer, only to reveal that the real problem was that nobody knew what the actual Question was. A larger computer — the Earth — was then built to find the Question, but was unfortunately demolished by the Vogons five minutes before completing its 10-million-year program.\n\nThe joke, of course, is that a precise answer without a meaningful question is useless — a wry commentary on humanity's search for cosmic meaning."
+    },
+    "final_round": 2,
+    "strategy": "vote-threshold",
+    "all_answers": [
+      {
+        "model_id": "codex-cli/gpt-5.4",
+        "answer": "42, according to Douglas Adams' *The Hitchhiker's Guide to the Galaxy*.",
+        "mean_score": 9.0
+      },
+      {
+        "model_id": "claude-code/claude-opus-4-6",
+        "answer": "**42** — the answer computed by the supercomputer Deep Thought in Douglas Adams' *The Hitchhiker's Guide to the Galaxy* (1979). Deep Thought took 7.5 million years to arrive at this answer, only to reveal that the real problem was that nobody knew what the actual Question was. A larger computer — the Earth — was then built to find the Question, but was unfortunately demolished by the Vogons five minutes before completing its 10-million-year program.\n\nThe joke, of course, is that a precise answer without a meaningful question is useless — a wry commentary on humanity's search for cosmic meaning.",
+        "mean_score": 9.5
+      },
+      {
+        "model_id": "gemini-cli/gemini-3.1-pro-preview",
+        "answer": "The answer to life, the Universe, and everything is **42**.\n\nThis famous answer originates from Douglas Adams' classic science fiction comedy series, *The Hitchhiker's Guide to the Galaxy*. \n\nIn the story, a group of hyper-intelligent, pan-dimensional beings build a massive supercomputer named Deep Thought to calculate the answer to the Ultimate Question of Life, the Universe, and Everything. After pondering the problem for 7.5 million years, Deep Thought finally reveals the answer to be 42.\n\nHowever, the computer points out that the answer is ultimately meaningless to them because the creators never actually knew what the \"Ultimate Question\" was in the first place. To figure out the specific question that yields the answer 42, an even larger and more complex computer is built—a planet called Earth. Tragically, Earth is destroyed by the Vogons to make way for a hyperspace bypass just five minutes before its ten-million-year calculation is set to complete.\n\nSince the series' publication, the number \"42\" has transcended its origins to become a beloved staple of geek culture and science fiction trivia, frequently appearing as an Easter egg in software, video games, and across the internet.",
+        "mean_score": 9.0
+      }
+    ],
+    "metadata": {
+      "total_rounds": 2,
+      "total_calls": 18,
+      "elapsed_ms": 80667,
+      "models_dropped": []
+    }
+  }
+  ```
+</details>
+
+<details>
+  <summary>### The Car Wash Test</summary>
+</details>
+
 ## Library Usage
 
 ### Basic
