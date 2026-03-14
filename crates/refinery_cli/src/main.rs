@@ -327,7 +327,7 @@ async fn main() -> ExitCode {
         Ok((outcome, rounds)) => {
             // Save per-round artifacts if --output-dir is set
             if let Some(ref dir) = cli.output_dir {
-                let run_dir = make_run_dir(dir, &cli.prompt);
+                let run_dir = make_run_dir(dir, cli.prompt.as_deref());
                 if let Err(e) = save_round_artifacts(&run_dir, &rounds) {
                     eprintln!("Warning: failed to save artifacts: {e}");
                 }
@@ -556,7 +556,7 @@ async fn build_provider(
 ///
 /// Format: `YYYYMMDD-HHMMSS_<prompt-slug>` where the slug is the first
 /// 40 chars of the prompt, lowercased, with non-alphanumeric chars replaced by `-`.
-fn make_run_dir(base: &std::path::Path, prompt: &Option<String>) -> std::path::PathBuf {
+fn make_run_dir(base: &std::path::Path, prompt: Option<&str>) -> std::path::PathBuf {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -565,7 +565,6 @@ fn make_run_dir(base: &std::path::Path, prompt: &Option<String>) -> std::path::P
     let (y, mo, d, h, mi, s) = epoch_to_utc(secs);
     let timestamp = format!("{y:04}{mo:02}{d:02}-{h:02}{mi:02}{s:02}");
     let slug: String = prompt
-        .as_deref()
         .unwrap_or("no-prompt")
         .chars()
         .take(40)
