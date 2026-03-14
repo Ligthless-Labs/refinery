@@ -228,7 +228,18 @@ fn parse_evaluation(response: &str, model: &ModelId) -> Result<Evaluation, Provi
     // Accept score as integer (8) or float (8.0) — models may emit either
     let score_value = parsed["score"]
         .as_u64()
-        .or_else(|| parsed["score"].as_f64().map(|f| f.round() as u64))
+        .or_else(|| {
+            parsed["score"].as_f64().and_then(|f| {
+                let rounded = f.round();
+                // Scores are 1–10; reject negative or out-of-range floats
+                if (0.0..=10.0).contains(&rounded) {
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    Some(rounded as u64)
+                } else {
+                    None
+                }
+            })
+        })
         .ok_or_else(|| ProviderError::InvalidJson {
             model: model.clone(),
             message: format!(
