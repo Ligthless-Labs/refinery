@@ -90,14 +90,20 @@ impl Engine {
                 crate::types::Message::user(prompt.to_string()),
             ];
             let start = Instant::now();
-            let response = provider.send_message(&messages).await.map_err(|e| {
-                ConvergeError::PhaseFailure {
+            let response = provider
+                .send_message(&messages, Some(crate::prompts::ANSWER_SCHEMA))
+                .await
+                .map_err(|e| ConvergeError::PhaseFailure {
                     phase: crate::types::Phase::Propose,
                     model: provider.model_id().clone(),
                     source: e,
-                }
-            })?;
+                })?;
             let elapsed = start.elapsed();
+            // Extract answer from structured output, fall back to raw response
+            let answer = serde_json::from_str::<serde_json::Value>(&response)
+                .ok()
+                .and_then(|v| v.get("answer").and_then(|a| a.as_str()).map(String::from))
+                .unwrap_or(response);
 
             return Ok(Session {
                 prompt: prompt.to_string(),
@@ -107,7 +113,7 @@ impl Engine {
                 current_round: 1,
                 total_calls: 1,
                 start_time: start,
-                last_answers: HashMap::from([(provider.model_id().clone(), response)]),
+                last_answers: HashMap::from([(provider.model_id().clone(), answer)]),
                 last_mean_scores: HashMap::new(),
                 current_winner: Some(provider.model_id().clone()),
                 stable_rounds: 1,

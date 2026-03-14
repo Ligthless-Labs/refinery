@@ -75,21 +75,32 @@ impl CodexProvider {
         })
     }
 
-    fn build_args(&self, system_prompt: &str, user_prompt: &str, schema_path: &str) -> Vec<String> {
+    fn build_args(
+        &self,
+        system_prompt: &str,
+        user_prompt: &str,
+        schema_path: Option<&str>,
+    ) -> Vec<String> {
         let mut args = vec![
             "exec".to_string(),
             "--json".to_string(),
             "--sandbox".to_string(),
             "read-only".to_string(),
-            "--output-schema".to_string(),
-            schema_path.to_string(),
+        ];
+
+        if let Some(path) = schema_path {
+            args.push("--output-schema".to_string());
+            args.push(path.to_string());
+        }
+
+        args.extend([
             "--model".to_string(),
             self.model_name.clone(),
             "--config".to_string(),
             format!("model_reasoning_effort={}", self.reasoning_effort),
             "--config".to_string(),
             format!("developer_instructions={system_prompt}"),
-        ];
+        ]);
 
         if self.allowed_tools.iter().any(|t| t == "web_search") {
             args.push("--enable-web-search".to_string());
@@ -103,21 +114,31 @@ impl CodexProvider {
 
 #[async_trait]
 impl ModelProvider for CodexProvider {
-    async fn send_message(&self, messages: &[Message]) -> Result<String, ProviderError> {
+    async fn send_message(
+        &self,
+        messages: &[Message],
+        schema: Option<&str>,
+    ) -> Result<String, ProviderError> {
         let (system_prompt, user_prompt) = process::extract_prompts(messages);
 
-        // --output-schema expects a file path — write schema to temp file.
-        let schema_path =
-            std::env::temp_dir().join(format!("refinery-codex-schema-{}.json", std::process::id()));
-        let schema = r#"{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}"#;
-        std::fs::write(&schema_path, schema).map_err(|e| ProviderError::ProcessFailed {
-            model: self.model_id.clone(),
-            message: format!("failed to write schema temp file: {e}"),
-            exit_code: None,
-        })?;
-        let schema_path_str = schema_path.to_string_lossy().into_owned();
+        // --output-schema expects a file path — write schema to temp file when provided.
+        let schema_path = schema.map(|s| {
+            let path = std::env::temp_dir()
+                .join(format!("refinery-codex-schema-{}.json", std::process::id()));
+            (path, s)
+        });
+        if let Some((ref path, content)) = schema_path {
+            std::fs::write(path, content).map_err(|e| ProviderError::ProcessFailed {
+                model: self.model_id.clone(),
+                message: format!("failed to write schema temp file: {e}"),
+                exit_code: None,
+            })?;
+        }
+        let schema_path_str = schema_path
+            .as_ref()
+            .map(|(p, _)| p.to_string_lossy().into_owned());
 
-        let args = self.build_args(&system_prompt, &user_prompt, &schema_path_str);
+        let args = self.build_args(&system_prompt, &user_prompt, schema_path_str.as_deref());
         let args_refs: Vec<&str> = args.iter().map(String::as_str).collect();
 
         let home = std::env::var("HOME").ok();
@@ -140,7 +161,9 @@ impl ModelProvider for CodexProvider {
         )
         .await;
 
-        let _ = std::fs::remove_file(&schema_path);
+        if let Some((ref path, _)) = schema_path {
+            let _ = std::fs::remove_file(path);
+        }
 
         // Codex outputs JSONL; extract answer from turn.completed
         process::extract_codex_response(&result?)
@@ -176,7 +199,7 @@ mod tests {
             progress: None,
         };
 
-        let args = provider.build_args("system prompt", "user prompt", "/tmp/schema.json");
+        let args = provider.build_args("system prompt", "user prompt", Some("/tmp/schema.json"));
 
         assert!(args.contains(&"exec".to_string()));
         assert!(args.contains(&"--json".to_string()));

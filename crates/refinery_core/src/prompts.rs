@@ -1,5 +1,11 @@
 use std::fmt::Write as _;
 
+/// JSON schema for the PROPOSE phase — models return `{"answer": "..."}`.
+pub const ANSWER_SCHEMA: &str = r#"{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}"#;
+
+/// JSON schema for the EVALUATE phase — models return structured evaluation data.
+pub const EVALUATE_SCHEMA: &str = r#"{"type":"object","properties":{"strengths":{"type":"array","items":{"type":"string"}},"weaknesses":{"type":"array","items":{"type":"string"}},"suggestions":{"type":"array","items":{"type":"string"}},"overall_assessment":{"type":"string"},"rationale":{"type":"string"},"score":{"type":"integer"}},"required":["strengths","weaknesses","suggestions","overall_assessment","rationale","score"],"additionalProperties":false}"#;
+
 use rand::Rng;
 use rand::seq::SliceRandom;
 

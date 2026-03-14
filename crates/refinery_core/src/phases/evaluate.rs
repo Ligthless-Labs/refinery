@@ -69,7 +69,11 @@ pub async fn run(
 
             handles.spawn(async move {
                 let _permit = sem.acquire().await.expect("semaphore closed");
-                let result = tokio::time::timeout(timeout, provider.send_message(&messages)).await;
+                let result = tokio::time::timeout(
+                    timeout,
+                    provider.send_message(&messages, Some(prompts::EVALUATE_SCHEMA)),
+                )
+                .await;
 
                 match result {
                     Ok(Ok(response)) => match parse_evaluation(&response, &evaluator) {

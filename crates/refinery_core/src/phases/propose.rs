@@ -11,6 +11,18 @@ use crate::progress::{self, ProgressEvent, ProgressFn};
 use crate::prompts;
 use crate::types::{Message, ModelId, ProposalSet, RoundHistory};
 
+/// Extract the answer string from a structured `{"answer": "..."}` response.
+///
+/// Falls back to `None` if the response isn't valid JSON with an `answer` field,
+/// allowing the caller to use the raw response as-is (for providers without schema support).
+fn extract_answer(response: &str) -> Option<String> {
+    let parsed: serde_json::Value = serde_json::from_str(response).ok()?;
+    parsed
+        .get("answer")
+        .and_then(|a| a.as_str())
+        .map(String::from)
+}
+
 /// Execute the PROPOSE phase: each model independently produces an answer.
 ///
 /// In round N>1, if `model_histories` is provided, each model's prompt is
@@ -55,11 +67,16 @@ pub async fn run(
 
         handles.spawn(async move {
             let _permit = sem.acquire().await.expect("semaphore closed");
-            let result = tokio::time::timeout(timeout, provider.send_message(&messages)).await;
+            let result = tokio::time::timeout(
+                timeout,
+                provider.send_message(&messages, Some(prompts::ANSWER_SCHEMA)),
+            )
+            .await;
             match result {
                 Ok(Ok(response)) => {
                     info!(model = %model_id, phase = "propose", "received response");
-                    Ok((model_id, response))
+                    let answer = extract_answer(&response).unwrap_or(response);
+                    Ok((model_id, answer))
                 }
                 Ok(Err(e)) => {
                     warn!(model = %model_id, phase = "propose", error = %e, "provider error");
