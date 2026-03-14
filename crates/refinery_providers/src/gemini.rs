@@ -99,7 +99,11 @@ impl GeminiProvider {
 
 #[async_trait]
 impl ModelProvider for GeminiProvider {
-    async fn send_message(&self, messages: &[Message]) -> Result<String, ProviderError> {
+    async fn send_message(
+        &self,
+        messages: &[Message],
+        _schema: Option<&str>,
+    ) -> Result<String, ProviderError> {
         let (system_prompt, user_prompt) = process::extract_prompts(messages);
 
         let args = self.build_args(&user_prompt);

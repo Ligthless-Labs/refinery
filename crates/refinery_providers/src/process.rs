@@ -350,19 +350,19 @@ pub fn extract_gemini_response(json_text: &str) -> Result<String, ProviderError>
     }
 }
 
-/// Try to extract the answer from a single Claude result event.
+/// Try to extract the response from a single Claude result event.
 ///
-/// Checks `structured_output.answer` first, then falls back to `result`.
+/// When `--json-schema` is used, returns `structured_output` serialized as JSON.
+/// Otherwise, falls back to the `result` text field.
 fn extract_from_result_event(event: &serde_json::Value) -> Option<String> {
     if event.get("type").and_then(|t| t.as_str()) != Some("result") {
         return None;
     }
-    if let Some(answer) = event
-        .get("structured_output")
-        .and_then(|so| so.get("answer"))
-        .and_then(|a| a.as_str())
-    {
-        return Some(answer.to_string());
+    // Return structured_output as a JSON string (caller parses what they need)
+    if let Some(so) = event.get("structured_output") {
+        if !so.is_null() {
+            return Some(so.to_string());
+        }
     }
     event
         .get("result")
@@ -424,7 +424,11 @@ mod tests {
     fn extract_claude_structured_output() {
         let json = r#"[{"type":"system","subtype":"init"},{"type":"assistant","message":{"content":[{"type":"text","text":"Hello!"}]}},{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"answer":"Hello! How can I help you today?"}}]"#;
         let result = extract_claude_response(json).unwrap();
-        assert_eq!(result, "Hello! How can I help you today?");
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(
+            parsed["answer"].as_str().unwrap(),
+            "Hello! How can I help you today?"
+        );
     }
 
     #[test]
@@ -434,7 +438,18 @@ mod tests {
 {"type":"assistant","message":{"content":[{"type":"text","text":"Thinking..."}]}}
 {"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"answer":"Stream JSON answer"}}"#;
         let result = extract_claude_response(jsonl).unwrap();
-        assert_eq!(result, "Stream JSON answer");
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["answer"].as_str().unwrap(), "Stream JSON answer");
+    }
+
+    #[test]
+    fn extract_claude_eval_structured_output() {
+        // Evaluation schema returns score, rationale, etc. directly in structured_output
+        let jsonl = r#"{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"score":8,"rationale":"Good answer","strengths":["clear"],"weaknesses":[],"suggestions":[],"overall_assessment":"Solid."}}"#;
+        let result = extract_claude_response(jsonl).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["score"].as_u64().unwrap(), 8);
+        assert_eq!(parsed["rationale"].as_str().unwrap(), "Good answer");
     }
 
     #[test]

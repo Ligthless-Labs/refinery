@@ -14,9 +14,9 @@ use crate::{process, tools};
 ///
 /// Invokes: `claude -p --output-format json --json-schema {...} --max-turns 10 --effort high --model claude-opus-4-6 --append-system-prompt "SYSTEM" -- "PROMPT"`
 ///
-/// With `--json-schema`, Claude uses a `StructuredOutput` tool call internally.
-/// The final `type: "result"` event carries the answer in `structured_output.answer`
-/// (the `result` field is empty).
+/// When a JSON schema is provided, Claude uses a `StructuredOutput` tool call internally.
+/// The final `type: "result"` event carries the structured data in `structured_output`
+/// (the `result` field is empty). The schema varies by phase (answer vs evaluation).
 ///
 /// Supports: `ANTHROPIC_API_KEY` (pay-per-use) or `CLAUDE_CODE_OAUTH_TOKEN` (Pro/Max subscription).
 /// When neither is set, falls back to the Claude CLI's own stored credentials (`~/.claude.json`).
@@ -77,15 +77,25 @@ impl ClaudeProvider {
         })
     }
 
-    fn build_args(&self, system_prompt: &str, user_prompt: &str) -> Vec<String> {
+    fn build_args(
+        &self,
+        system_prompt: &str,
+        user_prompt: &str,
+        schema: Option<&str>,
+    ) -> Vec<String> {
         let mut args = vec![
             "-p".to_string(),
             "--verbose".to_string(), // required for stream-json in print mode
             "--output-format".to_string(),
             "stream-json".to_string(),
-            "--json-schema".to_string(),
-            r#"{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}"#
-                .to_string(),
+        ];
+
+        if let Some(s) = schema {
+            args.push("--json-schema".to_string());
+            args.push(s.to_string());
+        }
+
+        args.extend([
             "--max-turns".to_string(),
             "50".to_string(), // structured output requires multiple turns (hook → StructuredOutput tool)
             "--effort".to_string(),
@@ -94,7 +104,7 @@ impl ClaudeProvider {
             self.model_name.clone(),
             "--append-system-prompt".to_string(),
             system_prompt.to_string(),
-        ];
+        ]);
 
         if self.allowed_tools.is_empty() {
             // No tools requested — disable all tools
@@ -113,10 +123,14 @@ impl ClaudeProvider {
 
 #[async_trait]
 impl ModelProvider for ClaudeProvider {
-    async fn send_message(&self, messages: &[Message]) -> Result<String, ProviderError> {
+    async fn send_message(
+        &self,
+        messages: &[Message],
+        schema: Option<&str>,
+    ) -> Result<String, ProviderError> {
         let (system_prompt, user_prompt) = process::extract_prompts(messages);
 
-        let args = self.build_args(&system_prompt, &user_prompt);
+        let args = self.build_args(&system_prompt, &user_prompt, schema);
         let args_refs: Vec<&str> = args.iter().map(String::as_str).collect();
 
         // Always pass HOME so the CLI can find ~/.claude.json for stored credentials.
@@ -174,7 +188,8 @@ mod tests {
             progress: None,
         };
 
-        let args = provider.build_args("system prompt", "user prompt");
+        let args =
+            provider.build_args("system prompt", "user prompt", Some(r#"{"type":"object"}"#));
 
         assert!(args.contains(&"-p".to_string()));
         assert!(args.contains(&"--verbose".to_string()));
